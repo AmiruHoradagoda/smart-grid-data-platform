@@ -56,7 +56,9 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-
+      postgres:
+        condition: service_healthy
+        
     volumes:
       - ./src:/opt/spark-apps
 
@@ -66,14 +68,46 @@ services:
         "--conf",
         "spark.jars.ivy=/tmp/.ivy2",
         "--packages",
-        "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1",
+        "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.postgresql:postgresql:42.7.4",
         "/opt/spark-apps/streaming/smart_meter_stream.py"
       ]
 
     networks:
       - smart-grid-network
 
+  postgres:
+    image: postgres:16
+    container_name: smart-grid-postgres
+
+    environment:
+      POSTGRES_DB: smart_grid
+      POSTGRES_USER: smartgrid
+      POSTGRES_PASSWORD: smartgrid
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U smartgrid -d smart_grid"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - smart-grid-network
+
+
 networks:
   smart-grid-network:
     name: smart-grid-network
 
+volumes:
+  postgres-data:

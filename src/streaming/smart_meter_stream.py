@@ -1,3 +1,11 @@
+POSTGRES_URL = "jdbc:postgresql://postgres:5432/smart_grid"
+
+POSTGRES_PROPERTIES = {
+    "user": "smartgrid",
+    "password": "smartgrid",
+    "driver": "org.postgresql.Driver",
+}
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col,
@@ -192,7 +200,28 @@ def calculate_zone_metrics(events_df):
             "meter_readings",
         )
     )
+def write_zone_metrics_to_postgres(batch_df, batch_id):
+    """
+    Write finalized zone metrics from one Spark micro-batch
+    into PostgreSQL.
+    """
 
+    if batch_df.isEmpty():
+        return
+
+    (
+        batch_df.write
+        .jdbc(
+            url=POSTGRES_URL,
+            table="zone_energy_metrics",
+            mode="append",
+            properties=POSTGRES_PROPERTIES,
+        )
+    )
+
+    print(
+        f"Stored PostgreSQL batch: {batch_id}"
+    )
 
 def main():
     spark = create_spark_session()
@@ -215,9 +244,14 @@ def main():
 
     query = (
         zone_metrics.writeStream
-        .format("console")
         .outputMode("append")
-        .option("truncate", False)
+        .foreachBatch(
+            write_zone_metrics_to_postgres
+        )
+        .option(
+            "checkpointLocation",
+            "/tmp/checkpoints/zone-metrics",
+        )
         .start()
     )
 
