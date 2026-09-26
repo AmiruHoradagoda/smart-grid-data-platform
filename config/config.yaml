@@ -122,8 +122,9 @@ spark:
 
 postgres:
   host:
-    hostname: "localhost"
-    port: 5432
+    hostname: "127.0.0.1"
+    # Docker's host port avoids the native Windows PostgreSQL on 5432.
+    port: 5433
 
   docker:
     hostname: "postgres"

@@ -2238,18 +2238,22 @@ source = { virtual = "." }
 dependencies = [
     { name = "apache-airflow" },
     { name = "confluent-kafka" },
+    { name = "fastapi" },
     { name = "psycopg2-binary" },
     { name = "pyspark" },
     { name = "pyyaml" },
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "apache-airflow", specifier = ">=3.3.2" },
     { name = "confluent-kafka", specifier = ">=2.15.1" },
+    { name = "fastapi", specifier = ">=0.136.3" },
     { name = "psycopg2-binary", specifier = ">=2.9.13" },
     { name = "pyspark", specifier = "==3.5.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]
 
 [[package]]
