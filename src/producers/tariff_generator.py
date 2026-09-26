@@ -4,7 +4,9 @@ import time
 
 from datetime import date, timedelta
 from pathlib import Path
+
 from utils.config_loader import Config
+
 
 NUMBER_OF_HOUSEHOLDS = Config.get(
     "smart_meter.number_of_households"
@@ -38,34 +40,61 @@ def build_tariff_profiles():
 
     rng = random.Random(RANDOM_SEED)
 
-    tiers = (
-        ["SUBSIDIZED"] * 4
-        + ["STANDARD"] * 12
-        + ["HIGH_USAGE"] * 4
-    )
+    tiers = []
 
+    # Build the tier list using config.yaml
+    for tier_config in TARIFF_TIERS.values():
+
+        tier_name = tier_config["name"]
+        household_count = tier_config["household_count"]
+
+        tiers.extend(
+            [tier_name] * household_count
+        )
+
+    # Make sure every household receives exactly one tariff profile.
+    if len(tiers) != NUMBER_OF_HOUSEHOLDS:
+        raise ValueError(
+            "Total tariff household count must equal "
+            "NUMBER_OF_HOUSEHOLDS"
+        )
+
+    # Random distribution, but reproducible because of RANDOM_SEED.
     rng.shuffle(tiers)
+
+    # Easy lookup using the configured tier name.
+    tier_lookup = {
+        tier_config["name"]: tier_config
+        for tier_config in TARIFF_TIERS.values()
+    }
 
     profiles = []
 
-    for index, tier in enumerate(
+    for index, tier_name in enumerate(
         tiers,
         start=1,
     ):
 
         household_id = f"HH-{index:03d}"
 
+        tier_config = tier_lookup[tier_name]
+
         profiles.append(
             {
                 "household_id": household_id,
-                "billing_tier": tier,
-                "tariff_rate": TARIFF_TIERS[tier],
+
+                "billing_tier": tier_name,
+
+                "tariff_rate":
+                    tier_config["rate_lkr_per_kwh"],
+
                 "subsidy_flag":
-                    tier == "SUBSIDIZED",
+                    tier_config["subsidy"],
             }
         )
 
     return profiles
+
 
 def generate_tariff_file(
     profiles,
@@ -126,8 +155,8 @@ def main():
     print("--------------------------------")
     print(f"Households: {len(profiles)}")
     print(
-        "Simulation: 5 real minutes = "
-        "1 simulated day"
+        f"Simulated day duration: "
+        f"{SIMULATED_DAY_SECONDS} real seconds"
     )
     print("--------------------------------")
 

@@ -95,7 +95,7 @@ tariff:
       subsidy: false
 
     high_usage:
-      name: "HIGH_USAGE"
+      name: "PREMIUM"
       rate_lkr_per_kwh: 48.0
       household_count: 4
       subsidy: false
