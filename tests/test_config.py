@@ -5,6 +5,9 @@ from utils.config_loader import Config
 
 @pytest.mark.parametrize("key, expected", [
     ("smart_meter.number_of_households", 20),
+    ("smart_meter.number_of_solar_houses", 13),
+    ("simulation.simulation_speed", 288),
+    ("tariff.random_seed", 42),
     ("kafka.topic", "smart-meter-readings"),
     ("postgres.database", "smart_grid"),
     ("alerts.low_renewable_threshold_pct", 20),

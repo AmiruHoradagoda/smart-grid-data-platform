@@ -1,11 +1,14 @@
 from datetime import date
 from contextlib import closing
+import logging
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, HTTPException
 
 from utils.config_loader import Config
+
+logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
@@ -74,6 +77,32 @@ def get_latest_zone_metrics():
 
     finally:
         connection.close()
+
+
+@app.get("/api/v1/alerts/renewable")
+def get_renewable_alerts():
+    threshold = Config.get("alerts.low_renewable_threshold_pct")
+    start_hour = Config.get("alerts.active_start_hour")
+    end_hour = Config.get("alerts.active_end_hour")
+    # Reuse the latest-per-zone query; it closes its connection before returning.
+    zones = get_latest_zone_metrics()
+    alerts = []
+    for zone in zones:
+        if (start_hour <= zone["window_end"].hour < end_hour
+                and zone["renewable_contribution_pct"] < threshold):
+            alerts.append({
+                "grid_zone": zone["grid_zone"],
+                "renewable_contribution_pct": zone["renewable_contribution_pct"],
+                "status": "LOW_RENEWABLE",
+                "window_end": zone["window_end"],
+            })
+            logger.warning(
+                "low renewable contribution grid_zone=%s renewable_pct=%s threshold_pct=%s",
+                zone["grid_zone"], zone["renewable_contribution_pct"], threshold,
+            )
+    logger.info("renewable alert check completed zones_checked=%s alerts_found=%s",
+                len(zones), len(alerts))
+    return {"threshold_pct": threshold, "alerts": alerts}
 
 
 @app.get("/api/v1/billing/daily")

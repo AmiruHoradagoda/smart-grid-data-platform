@@ -58,12 +58,11 @@ Current [configuration](config/config.yaml):
 - Seed 42 fixes solar-household selection only. Loads and weather vary randomly.
 - Tariffs: 4 `SUBSIDIZED` households at 32 LKR/kWh, 12 `STANDARD` at 42,
   and 4 `PREMIUM` at 48. Only the subsidized tier has `subsidy_flag=true`.
-- Tariff profiles stay fixed during a generator run. `tariff.random_seed` is
-  currently absent, so assignments can change on restart.
+- Tariff seed 42 makes household tier assignments reproducible across restarts.
 
-Some meter simulation values (including speed, start date, and consumption
-multipliers) are still hardcoded to the values above. Editing YAML alone does
-not change those values. The two generators have independent clocks.
+Meter simulation parameters are loaded from YAML. The two generators have
+independent clocks. Loads and weather are not seeded; reproducibility applies to
+solar-household selection and tariff assignment, not the complete event stream.
 
 ## Calculations and storage
 
@@ -123,14 +122,17 @@ Base URL: `http://127.0.0.1:8000`. These are the implemented GET endpoints:
 Household IDs are currently arbitrary strings; malformed IDs with no matching
 rows return 404 rather than a format-validation error.
 
-### Renewable alert status
+### Renewable alerts
 
-Configuration contains threshold **20%**, start hour **6**, and end hour **18**.
-These settings express the intended daylight-only alert, avoiding expected low
-solar generation at night. **No alert endpoint or evaluation logic exists in
-this checkout.** `/api/v1/alerts/renewable` is not an implemented API contract.
-The test suite explicitly skips its response test. API containerization is also
-not yet implemented; neither feature is added during this documentation pass.
+`GET /api/v1/alerts/renewable` reads the most recent stored window per zone.
+It returns `{"threshold_pct": 20, "alerts": [...]}`; each alert contains
+`grid_zone`, `renewable_contribution_pct`, `status: "LOW_RENEWABLE"`, and `window_end`.
+A value strictly below 20% triggers an alert only when the stored `window_end`
+hour is in **06:00 <= hour < 18:00**. Threshold and hours come from YAML.
+Nighttime is ignored because low solar generation is expected. No matches returns
+an empty list. Alerts are evaluated on request, with structured INFO/WARNING logs;
+they are not persisted or pushed as notifications. Latest stored data may be stale.
+FastAPI remains host-run.
 
 ## Run locally
 
@@ -174,12 +176,12 @@ one day to finalize daily summaries. Airflow then loads tariffs and calculates
 bills. Press Ctrl+C to stop each host process.
 
 **Existing data:** both producers restart from January 1. The tariff generator
-overwrites files with matching dates and can reassign tariffs. For an existing
+overwrites files with matching dates and may replace historical profiles generated before the fixed seed was added. For an existing
 submission/demo dataset, use the read-only [demo checklist](docs/demo-checklist.md)
 instead of restarting generators. Do not delete volumes or checkpoints to retry.
 
 Host PostgreSQL is `127.0.0.1:5433` (avoids native Windows PostgreSQL on 5432);
-containers use `postgres:5432`. Demo credentials are `smartgrid` / `smartgrid`.
+containers use `postgres:5432`. **Local demo credentials** are `smartgrid` / `smartgrid`.
 The config loader caches YAML per process: restart host processes after changing it.
 
 Useful URLs:
@@ -203,7 +205,7 @@ uv run pytest
 
 Tests use mocked API database connections and temporary CSV files; no Docker,
 PostgreSQL, Kafka, or Java runtime is needed. They cover config loading, API
-validation and failures, consumption/solar patterns, and tariff distribution.
+validation and failures, consumption/solar patterns, tariff reproducibility, and renewable alert daylight/threshold boundaries.
 Spark expressions and billing SQL remain in their existing engines; the unit
 suite does not claim to execute those calculations. See
 [validation commands](docs/validation.md) for read-only database checks.

@@ -9,3 +9,8 @@ wheels/
 # Virtual environments
 .venv
 .pytest_cache/
+.env
+.env.*
+*.log
+*.tmp
+simple_auth_manager_passwords.json*

@@ -46,25 +46,11 @@ SOLAR_HOUSEHOLDS = set(
     )
 )
 
-# 5 real minutes = 1 simulated day.
-SIMULATION_SPEED = 288
-
+SIMULATION_SPEED = Config.get("simulation.simulation_speed")
 REAL_START_TIME = datetime.now(timezone.utc)
-SIMULATION_START_TIME = datetime(
-    2026,
-    1,
-    1,
-    0,
-    0,
-    0,
-    tzinfo=timezone.utc,
-)
-
-GRID_ZONES = [
-    "ZONE-A",
-    "ZONE-B",
-    "ZONE-C",
-]
+SIMULATION_START_TIME = datetime.fromisoformat(
+    Config.get("simulation.start_date")
+).replace(tzinfo=timezone.utc)
 
 
 def get_simulated_time():
@@ -100,24 +86,27 @@ def calculate_consumption(hour, base_load):
         raise ValueError("hour must be between 0 and 24")
 
     if 0 <= hour < 5:
-        multiplier = 0.6
+        multiplier = Config.get("smart_meter.consumption.multipliers.midnight_to_05")
 
     elif 5 <= hour < 6:
-        multiplier = 0.8
+        multiplier = Config.get("smart_meter.consumption.multipliers.05_to_06")
 
     elif 6 <= hour < 9:
-        multiplier = 1.6
+        multiplier = Config.get("smart_meter.consumption.multipliers.06_to_09")
 
     elif 9 <= hour < 18:
-        multiplier = 1.0
+        multiplier = Config.get("smart_meter.consumption.multipliers.09_to_18")
 
     elif 18 <= hour < 22:
-        multiplier = 2.0
+        multiplier = Config.get("smart_meter.consumption.multipliers.18_to_22")
 
     else:  # 22:00 - 24:00
-        multiplier = 1.2
+        multiplier = Config.get("smart_meter.consumption.multipliers.22_to_midnight")
 
-    random_variation = random.uniform(0.85, 1.15)
+    random_variation = random.uniform(
+        Config.get("smart_meter.consumption.random_variation.min"),
+        Config.get("smart_meter.consumption.random_variation.max"),
+    )
 
     consumption = (
         base_load
@@ -140,16 +129,26 @@ def calculate_solar_generation(hour, solar_capacity):
     if solar_capacity == 0:
         return 0.0
 
-    if hour < 6 or hour >= 18:
+    sunrise = Config.get("smart_meter.solar_generation.sunrise_hour")
+    peak = Config.get("smart_meter.solar_generation.peak_hour")
+    sunset = Config.get("smart_meter.solar_generation.sunset_hour")
+    if hour < sunrise or hour >= sunset:
         return 0.0
 
-    daylight_progress = (hour - 6) / 12
+    # Half a sine wave on either side of the configured peak.
+    if hour <= peak:
+        daylight_progress = 0.5 * (hour - sunrise) / (peak - sunrise)
+    else:
+        daylight_progress = 0.5 + 0.5 * (hour - peak) / (sunset - peak)
 
     solar_factor = math.sin(
         math.pi * daylight_progress
     )
 
-    weather_variation = random.uniform(0.75, 1.0)
+    weather_variation = random.uniform(
+        Config.get("smart_meter.solar_generation.weather_variation.min"),
+        Config.get("smart_meter.solar_generation.weather_variation.max"),
+    )
 
     generation = (
         solar_capacity
@@ -176,12 +175,18 @@ def build_households():
             (index - 1) % len(GRID_ZONES)
         ]  # Assign households to zones in round-robin order.
 
-        base_load = random.uniform(0.15, 0.45)
+        base_load = random.uniform(
+            Config.get("smart_meter.base_load.min_kwh"),
+            Config.get("smart_meter.base_load.max_kwh"),
+        )
 
         has_solar = index in SOLAR_HOUSEHOLDS
 
         solar_capacity = (
-            random.uniform(0.1, 0.5)
+            random.uniform(
+                Config.get("smart_meter.solar_capacity.min_kwh"),
+                Config.get("smart_meter.solar_capacity.max_kwh"),
+            )
             if has_solar
             else 0
         )
@@ -256,8 +261,7 @@ def main():
     print(f"Households: {len(households)}")
     print(f"Kafka Topic: {KAFKA_TOPIC}")
     print(
-        "Simulation: 5 real minutes = "
-        "1 simulated day"
+        f"Simulation speed: {SIMULATION_SPEED} simulated seconds per real second"
     )
     print("--------------------------------")
 

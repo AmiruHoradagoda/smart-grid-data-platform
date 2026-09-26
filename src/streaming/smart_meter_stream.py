@@ -1,11 +1,3 @@
-POSTGRES_URL = "jdbc:postgresql://postgres:5432/smart_grid"
-
-POSTGRES_PROPERTIES = {
-    "user": "smartgrid",
-    "password": "smartgrid",
-    "driver": "org.postgresql.Driver",
-}
-
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col,
@@ -28,6 +20,17 @@ from pyspark.sql.types import (
 )
 from pyspark.sql import functions as F
 from utils.config_loader import Config
+
+POSTGRES_URL = (
+    f"jdbc:postgresql://{Config.get('postgres.docker.hostname')}:"
+    f"{Config.get('postgres.docker.port')}/{Config.get('postgres.database')}"
+)
+POSTGRES_PROPERTIES = {
+    "user": Config.get("postgres.user"),
+    "password": Config.get("postgres.password"),
+    "driver": "org.postgresql.Driver",
+}
+
 
 KAFKA_BOOTSTRAP_SERVERS = Config.get(
     "kafka.bootstrap_servers.docker"
@@ -67,7 +70,7 @@ SMART_METER_SCHEMA = StructType([
 def create_spark_session():
     return (
         SparkSession.builder
-        .appName("SmartGridMeterStreaming")
+        .appName(Config.get("spark.application_name"))
         .getOrCreate()
     )
 
@@ -86,7 +89,7 @@ def read_kafka_stream(spark):
         )
         .option(
             "startingOffsets",
-            "latest",
+            Config.get("spark.starting_offsets"),
         )
         .load()
     )
@@ -230,7 +233,7 @@ def write_zone_metrics_to_postgres(batch_df, batch_id):
         batch_df.write
         .jdbc(
             url=POSTGRES_URL,
-            table="zone_energy_metrics",
+            table=Config.get("postgres.tables.zone_energy_metrics"),
             mode="append",
             properties=POSTGRES_PROPERTIES,
         )

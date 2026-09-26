@@ -58,3 +58,28 @@ def test_tariff_household_count_mismatch(monkeypatch):
     monkeypatch.setattr(tariff, "NUMBER_OF_HOUSEHOLDS", 21)
     with pytest.raises(ValueError, match="household count"):
         tariff.build_tariff_profiles()
+
+
+def test_tariff_reproducibility():
+    assert tariff.RANDOM_SEED == 42
+    assert tariff.build_tariff_profiles() == tariff.build_tariff_profiles()
+
+
+def test_configured_consumption(monkeypatch):
+    from utils.config_loader import Config
+    monkeypatch.setitem(Config.get("smart_meter.consumption.multipliers"), "09_to_18", 1.5)
+    monkeypatch.setattr(meter.random, "uniform", lambda low, high: 1.0)
+    assert meter.calculate_consumption(12, 2) == 3
+
+
+def test_configured_solar_boundaries(monkeypatch):
+    from utils.config_loader import Config
+    settings = Config.get("smart_meter.solar_generation")
+    for key, value in [("sunrise_hour", 7), ("peak_hour", 11), ("sunset_hour", 17)]:
+        monkeypatch.setitem(settings, key, value)
+    monkeypatch.setattr(meter.random, "uniform", lambda low, high: 1.0)
+    assert meter.calculate_solar_generation(6, 0.5) == 0
+    assert meter.calculate_solar_generation(7, 0.5) == 0
+    assert meter.calculate_solar_generation(11, 0.5) == 0.5
+    assert meter.calculate_solar_generation(14, 0.5) > 0
+    assert meter.calculate_solar_generation(17, 0.5) == 0

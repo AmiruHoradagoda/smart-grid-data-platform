@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -83,6 +83,51 @@ def test_latest_zones(api):
     connection.close.assert_called_once()
 
 
-@pytest.mark.skip(reason="Renewable alert endpoint is not implemented; only config exists.")
-def test_renewable_alert_response_structure():
-    """Add a response contract test when the endpoint has an actual schema."""
+@pytest.mark.parametrize("hour,pct,expected", [
+    (10, 14.8, True), (10, 25, False), (10, 20, False),
+    (5, 10, False), (6, 10, True), (17, 10, True), (18, 10, False),
+])
+def test_renewable_alerts(api, caplog, hour, pct, expected):
+    client, connection, cursor, _ = api
+    timestamp = datetime(2026, 1, 1, hour)
+    cursor.fetchall.return_value = [{"grid_zone": "ZONE-B", "window_end": timestamp,
+                                      "renewable_contribution_pct": pct}]
+    with caplog.at_level("INFO", logger=main.__name__):
+        response = client.get("/api/v1/alerts/renewable")
+    assert response.status_code == 200
+    assert response.json() == {"threshold_pct": 20, "alerts": [
+        {"grid_zone": "ZONE-B", "window_end": timestamp.isoformat(),
+         "renewable_contribution_pct": pct, "status": "LOW_RENEWABLE"}
+    ] if expected else []}
+    assert "zones_checked=1" in caplog.text
+    assert ("low renewable contribution" in caplog.text) == expected
+    connection.close.assert_called_once()
+
+
+def test_alerts_empty_database(api):
+    client, connection, _, _ = api
+    assert client.get("/api/v1/alerts/renewable").json() == {"threshold_pct": 20, "alerts": []}
+    connection.close.assert_called_once()
+
+
+def test_alert_query_failure_cleanup(api):
+    client, connection, cursor, _ = api
+    cursor.execute.side_effect = psycopg2.OperationalError("query failed")
+    with pytest.raises(psycopg2.OperationalError):
+        client.get("/api/v1/alerts/renewable")
+    connection.close.assert_called_once()
+
+
+def test_alert_custom_configuration(api, monkeypatch):
+    from utils.config_loader import Config
+    monkeypatch.setitem(Config.load(), "alerts", {
+        "low_renewable_threshold_pct": 30, "active_start_hour": 8, "active_end_hour": 16,
+    })
+    client, _, cursor, _ = api
+    cursor.fetchall.return_value = [
+        {"grid_zone": "ZONE-A", "window_end": datetime(2026, 1, 1, 7), "renewable_contribution_pct": 10},
+        {"grid_zone": "ZONE-B", "window_end": datetime(2026, 1, 1, 10), "renewable_contribution_pct": 25},
+    ]
+    result = client.get("/api/v1/alerts/renewable").json()
+    assert result["threshold_pct"] == 30
+    assert [r["grid_zone"] for r in result["alerts"]] == ["ZONE-B"]

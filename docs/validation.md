@@ -77,11 +77,12 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 Invoke-RestMethod http://127.0.0.1:8000/api/v1/zones/latest
 Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/billing/daily?billing_date=2026-01-01'
 Invoke-RestMethod http://127.0.0.1:8000/api/v1/households/HH-001/billing
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/alerts/renewable
 ```
 
 Choose a billing date present in SQL results. Missing data returns 404; invalid
-dates return 422. Swagger is at http://127.0.0.1:8000/docs. Renewable alerts have
-configuration only, so no successful alert response can currently be validated.
+dates return 422. Swagger is at http://127.0.0.1:8000/docs. Renewable alerts return `threshold_pct` and `alerts`; an empty list is valid
+when latest stored windows are outside daylight or meet the threshold.
 
 ## Automated tests and import checks
 

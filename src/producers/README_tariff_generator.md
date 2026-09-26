@@ -102,11 +102,12 @@ If they do not match, the application raises an error.
 
 This prevents incorrect configuration where some households would not receive a tariff profile.
 
-## Random assignment
+## Reproducible assignment
 
-The generator reads `tariff.random_seed`, which is currently absent from YAML.
-Assignments therefore remain fixed within a run but may change after restarting.
-The solar-selection seed of 42 is separate.
+`tariff.random_seed: 42` seeds a local random generator. The same household IDs
+receive the same tariff tiers across restarts. This is separate from the solar
+selection seed. Existing CSVs are not rewritten by this configuration change.
+Running the generator again will overwrite files for matching dates.
 
 ## Tariff Rate Selection
 
@@ -271,7 +272,7 @@ HH-005,42.0,STANDARD,false,2026-01-01
 - Tariff rates are not real utility rates.
 - Every household receives exactly one billing tier.
 - Total tariff-tier household counts must equal the total number of households.
-- Tariff assignments may change on restart because `tariff.random_seed` is unset.
+- Tariff assignments are reproducible with `tariff.random_seed: 42`.
 - The tariff profile remains the same between simulated days for now.
 - One tariff CSV is generated per simulated day.
 - Five real minutes represent one simulated day.

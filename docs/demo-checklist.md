@@ -37,11 +37,12 @@ Use existing data for a reliable, read-only demo. Have FastAPI running with
 - [ ] **6–8 min: API.** In http://127.0.0.1:8000/docs, run `/health`, latest
   zones, daily bills for a date shown above, and household `HH-001` history.
   Explain 404 for absent data and 422 for invalid dates.
-- [ ] **8–9 min: Alert scope.** Show the 20% / 06:00–18:00 settings in YAML.
-  Explain why nights would be ignored. Clearly state the alert endpoint is
-  not implemented; do not present it as a working feature.
-- [ ] **9–10 min: Tests.** Run `uv run pytest`; explain mocked database tests,
-  temporary CSV output, and the explicit skipped alert test.
+- [ ] **8-9 min: Alerts.** Run `/api/v1/alerts/renewable` in Swagger. Explain
+  the strict 20% threshold and 06:00-18:00 period using stored `window_end`.
+  An empty list is valid at night or for zones meeting the threshold. The mocked
+  tests demonstrate a low-renewable daylight case without modifying stored data.
+- [ ] **9-10 min: Tests.** Run `uv run pytest`; explain mocked connections,
+  temporary CSVs, tariff reproducibility, and alert boundary tests.
 
 For a fresh live demonstration, start both generators together before presenting
 and allow more than five minutes plus Airflow scheduling time for billing.

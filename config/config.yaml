@@ -79,6 +79,7 @@ smart_meter:
 # ============================================================
 
 tariff:
+  random_seed: 42
   output_directory: "data/tariffs"
 
   tiers:

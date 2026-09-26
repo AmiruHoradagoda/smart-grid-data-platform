@@ -1,4 +1,5 @@
 import csv
+import logging
 
 from datetime import datetime
 from pathlib import Path
@@ -8,6 +9,8 @@ import psycopg2
 from airflow.sdk import dag, task
 
 from utils.config_loader import Config
+
+logger = logging.getLogger(__name__)
 
 
 TARIFF_DIRECTORY = (
@@ -216,10 +219,7 @@ def tariff_ingestion():
                                 ),
                             )
 
-                    print(
-                        f"Loaded tariff file: "
-                        f"{Path(file_path).name}"
-                    )
+                    logger.info("Loaded tariff file: %s", Path(file_path).name)
 
             connection.commit()
 
