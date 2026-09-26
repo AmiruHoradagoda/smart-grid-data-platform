@@ -1,0 +1,137 @@
+# ============================================================
+# Smart Grid Data Platform Configuration
+# ============================================================
+
+simulation:
+  # 5 real minutes = 1 simulated day
+  simulated_day_seconds: 300
+  simulation_speed: 288
+
+  start_date: "2026-01-01"
+
+
+# ============================================================
+# Kafka
+# ============================================================
+
+kafka:
+  topic: "smart-meter-readings"
+
+  bootstrap_servers:
+    # Used by Python programs running directly on the host machine
+    host: "localhost:9092"
+
+    # Used by services running inside Docker
+    docker: "kafka:29092"
+
+
+# ============================================================
+# Smart Meter Producer
+# ============================================================
+
+smart_meter:
+  number_of_households: 20
+  number_of_solar_houses: 13
+
+  # Used only to make solar-household selection reproducible
+  random_seed: 42
+
+  event_interval_seconds: 1
+
+  grid_zones:
+    - "ZONE-A"
+    - "ZONE-B"
+    - "ZONE-C"
+
+  base_load:
+    min_kwh: 0.15
+    max_kwh: 0.45
+
+  solar_capacity:
+    min_kwh: 0.10
+    max_kwh: 0.50
+
+  consumption:
+    random_variation:
+      min: 0.85
+      max: 1.15
+
+    multipliers:
+      midnight_to_05: 0.6
+      05_to_06: 0.8
+      06_to_09: 1.6
+      09_to_18: 1.0
+      18_to_22: 2.0
+      22_to_midnight: 1.2
+
+  solar_generation:
+    sunrise_hour: 6
+    peak_hour: 12
+    sunset_hour: 18
+
+    weather_variation:
+      min: 0.75
+      max: 1.0
+
+
+# ============================================================
+# Daily Tariff Generator
+# ============================================================
+
+tariff:
+  output_directory: "data/tariffs"
+
+  tiers:
+    subsidized:
+      name: "SUBSIDIZED"
+      rate_lkr_per_kwh: 32.0
+      household_count: 4
+      subsidy: true
+
+    standard:
+      name: "STANDARD"
+      rate_lkr_per_kwh: 42.0
+      household_count: 12
+      subsidy: false
+
+    high_usage:
+      name: "HIGH_USAGE"
+      rate_lkr_per_kwh: 48.0
+      household_count: 4
+      subsidy: false
+
+
+# ============================================================
+# Spark Streaming
+# ============================================================
+
+spark:
+  application_name: "SmartGridMeterStreaming"
+
+  starting_offsets: "latest"
+
+  window_duration: "5 minutes"
+  watermark_duration: "10 minutes"
+
+  checkpoint_location: "/tmp/checkpoints/zone-metrics"
+
+
+# ============================================================
+# PostgreSQL
+# ============================================================
+
+postgres:
+  host:
+    hostname: "localhost"
+    port: 5432
+
+  docker:
+    hostname: "postgres"
+    port: 5432
+
+  database: "smart_grid"
+  user: "smartgrid"
+  password: "smartgrid"
+
+  tables:
+    zone_energy_metrics: "zone_energy_metrics"

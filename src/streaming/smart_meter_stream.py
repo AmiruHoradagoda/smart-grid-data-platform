@@ -26,11 +26,21 @@ from pyspark.sql.types import (
     IntegerType,
     DoubleType,
 )
+from utils.config_loader import Config
 
+KAFKA_BOOTSTRAP_SERVERS = Config.get(
+    "kafka.bootstrap_servers.host"
+)
+KAFKA_TOPIC = Config.get(
+    "kafka.topic"
+)
+WINDOW_DURATION = Config.get(
+    "spark.window_duration"
+)
 
-KAFKA_BOOTSTRAP_SERVERS = "kafka:29092"
-KAFKA_TOPIC = "smart-meter-readings"
-
+WATERMARK_DURATION = Config.get(
+    "spark.watermark_duration"
+)
 
 SMART_METER_SCHEMA = StructType([
     StructField("event_id", StringType(), False),
@@ -142,12 +152,12 @@ def calculate_zone_metrics(events_df):
         events_df
         .withWatermark(
             "event_timestamp",
-            "10 minutes",
+            WATERMARK_DURATION,
         )
         .groupBy(
             window(
                 col("event_timestamp"),
-                "5 minutes",
+                WINDOW_DURATION,
             ),
             col("grid_zone"),
         )

@@ -5,19 +5,37 @@ import time
 import uuid
 
 from datetime import datetime, timedelta, timezone
-
 from confluent_kafka import Producer
+from utils.config_loader import Config
 
 
-KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
-KAFKA_TOPIC = "smart-meter-readings"
+KAFKA_TOPIC = Config.get(
+    "kafka.topic"
+)
 
-NUMBER_OF_HOUSEHOLDS = 20
-EVENT_INTERVAL_SECONDS = 1
+KAFKA_BOOTSTRAP_SERVERS = Config.get(
+    "kafka.bootstrap_servers.host"
+)
 
-NUMBER_OF_HOUSEHOLDS = 20
-NUMBER_OF_SOLAR_HOUSES = 13
-RANDOM_SEED = 42
+NUMBER_OF_HOUSEHOLDS = Config.get(
+    "smart_meter.number_of_households"
+)
+
+NUMBER_OF_SOLAR_HOUSES = Config.get(
+    "smart_meter.number_of_solar_houses"
+)
+
+RANDOM_SEED = Config.get(
+    "smart_meter.random_seed"
+)
+
+EVENT_INTERVAL_SECONDS = Config.get(
+    "smart_meter.event_interval_seconds"
+)
+
+GRID_ZONES = Config.get(
+    "smart_meter.grid_zones"
+)
 
 rng = random.Random(RANDOM_SEED)
 
