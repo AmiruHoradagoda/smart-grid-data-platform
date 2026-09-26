@@ -26,10 +26,11 @@ from pyspark.sql.types import (
     IntegerType,
     DoubleType,
 )
+from pyspark.sql import functions as F
 from utils.config_loader import Config
 
 KAFKA_BOOTSTRAP_SERVERS = Config.get(
-    "kafka.bootstrap_servers.host"
+    "kafka.bootstrap_servers.docker"
 )
 KAFKA_TOPIC = Config.get(
     "kafka.topic"
@@ -40,6 +41,12 @@ WINDOW_DURATION = Config.get(
 
 WATERMARK_DURATION = Config.get(
     "spark.watermark_duration"
+)
+HOUSEHOLD_CHECKPOINT_LOCATION = Config.get(
+    "spark.household_checkpoint_location"
+)
+ZONE_CHECKPOINT_LOCATION = Config.get(
+    "spark.zone_checkpoint_location"
 )
 
 SMART_METER_SCHEMA = StructType([
@@ -232,27 +239,108 @@ def write_zone_metrics_to_postgres(batch_df, batch_id):
     print(
         f"Stored PostgreSQL batch: {batch_id}"
     )
+def calculate_daily_household_energy(clean_df):
+    """
+    Calculate one daily energy summary for each household.
+    """
 
+    return (
+        clean_df
+        .withWatermark(
+            "event_timestamp",
+            Config.get("spark.watermark_duration"),
+        )
+        .groupBy(
+            F.window(
+                F.col("event_timestamp"),
+                "1 day",
+            ),
+            F.col("household_id"),
+            F.col("grid_zone"),
+        )
+        .agg(
+            F.round(
+                F.sum("power_consumption_kwh"),
+                3,
+            ).alias("total_consumption_kwh"),
+
+            F.round(
+                F.sum("solar_generation_kwh"),
+                3,
+            ).alias("total_solar_generation_kwh"),
+
+            F.round(
+                F.sum("grid_import_kwh"),
+                3,
+            ).alias("total_grid_import_kwh"),
+
+            F.count("*").alias(
+                "meter_readings"
+            ),
+        )
+        .select(
+            F.to_date(
+                F.col("window.start")
+            ).alias("energy_date"),
+
+            "household_id",
+            "grid_zone",
+            "total_consumption_kwh",
+            "total_solar_generation_kwh",
+            "total_grid_import_kwh",
+            "meter_readings",
+        )
+    )
+def write_household_batch(batch_df, batch_id):
+    """
+    Store finalized daily household energy totals
+    in PostgreSQL.
+    """
+
+    if batch_df.isEmpty():
+        return
+
+    (
+        batch_df.write
+        .jdbc(
+            url=POSTGRES_URL,
+            table="household_daily_energy",
+            mode="append",
+            properties=POSTGRES_PROPERTIES,
+        )
+    )
+
+    print(
+        f"Stored household batch: {batch_id}"
+    )
+    
 def main():
     spark = create_spark_session()
 
     spark.sparkContext.setLogLevel("WARN")
 
+    # Read continuous smart-meter events from Kafka.
     kafka_df = read_kafka_stream(spark)
 
+    # Parse JSON events.
     parsed_events = parse_meter_events(
         kafka_df
     )
 
+    # Validate events and calculate grid import.
     valid_events = prepare_meter_events(
         parsed_events
     )
+
+    # -------------------------------------------------
+    # Stream 1: Real-time zone metrics
+    # -------------------------------------------------
 
     zone_metrics = calculate_zone_metrics(
         valid_events
     )
 
-    query = (
+    zone_query = (
         zone_metrics.writeStream
         .outputMode("append")
         .foreachBatch(
@@ -260,13 +348,35 @@ def main():
         )
         .option(
             "checkpointLocation",
-            "/tmp/checkpoints/zone-metrics",
+            ZONE_CHECKPOINT_LOCATION,
         )
         .start()
     )
 
-    query.awaitTermination()
+    # -------------------------------------------------
+    # Stream 2: Daily household energy
+    # -------------------------------------------------
 
+    household_daily_energy = (
+        calculate_daily_household_energy(
+            valid_events
+        )
+    )
 
+    household_query = (
+        household_daily_energy.writeStream
+        .outputMode("append")
+        .foreachBatch(
+            write_household_batch
+        )
+        .option(
+            "checkpointLocation",
+            HOUSEHOLD_CHECKPOINT_LOCATION,
+        )
+        .start()
+    )
+
+    # Keep both streaming queries running.
+    spark.streams.awaitAnyTermination()
 if __name__ == "__main__":
     main()

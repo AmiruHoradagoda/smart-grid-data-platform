@@ -113,8 +113,8 @@ spark:
   window_duration: "5 minutes"
   watermark_duration: "10 minutes"
 
-  checkpoint_location: "/tmp/checkpoints/zone-metrics"
-
+  zone_checkpoint_location: "/opt/spark-checkpoints/zone-metrics"
+  household_checkpoint_location: "/opt/spark-checkpoints/household-daily-energy"
 
 # ============================================================
 # PostgreSQL

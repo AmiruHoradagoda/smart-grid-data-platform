@@ -1,5 +1,4 @@
 services:
-
   kafka:
     image: apache/kafka:3.9.0
     container_name: smart-grid-kafka
@@ -39,7 +38,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1"
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1",
         ]
       interval: 10s
       timeout: 5s
@@ -48,19 +47,26 @@ services:
     networks:
       - smart-grid-network
 
-
   spark:
-    image: apache/spark:3.5.1
+    build:
+      context: ./src/streaming
+    image: smart-grid-spark:3.5.1
     container_name: smart-grid-spark
+
+    environment:
+      PYTHONPATH: /opt/spark-apps
 
     depends_on:
       kafka:
         condition: service_healthy
       postgres:
         condition: service_healthy
-        
+
     volumes:
       - ./src:/opt/spark-apps
+      - ./utils:/opt/spark-apps/utils
+      - ./config:/opt/spark-apps/config
+      - spark-checkpoints:/opt/spark-checkpoints
 
     command:
       [
@@ -69,7 +75,7 @@ services:
         "spark.jars.ivy=/tmp/.ivy2",
         "--packages",
         "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.postgresql:postgresql:42.7.4",
-        "/opt/spark-apps/streaming/smart_meter_stream.py"
+        "/opt/spark-apps/streaming/smart_meter_stream.py",
       ]
 
     networks:
@@ -92,11 +98,7 @@ services:
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
 
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U smartgrid -d smart_grid"
-        ]
+      test: ["CMD-SHELL", "pg_isready -U smartgrid -d smart_grid"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -104,6 +106,39 @@ services:
     networks:
       - smart-grid-network
 
+  airflow:
+    image: apache/airflow:3.3.1
+    container_name: smart-grid-airflow
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://smartgrid:smartgrid@postgres:5432/airflow_meta"
+
+      PYTHONPATH: /opt/airflow/project
+
+      _PIP_ADDITIONAL_REQUIREMENTS: >
+        psycopg2-binary
+        pyyaml
+
+    volumes:
+      - ./src/airflow/dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data
+      - ./config:/opt/airflow/project/config
+      - ./utils:/opt/airflow/project/utils
+      - airflow-data:/opt/airflow
+
+    command: standalone
+
+    ports:
+      - "8080:8080"
+
+    networks:
+      - smart-grid-network
 
 networks:
   smart-grid-network:
@@ -111,3 +146,5 @@ networks:
 
 volumes:
   postgres-data:
+  airflow-data:
+  spark-checkpoints:
