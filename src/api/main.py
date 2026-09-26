@@ -80,7 +80,7 @@ def get_latest_zone_metrics():
 
 
 @app.get("/api/v1/zones/history")
-def get_zone_history(limit: int = Query(default=100, ge=1, le=1000)):
+def get_zone_history(limit: int = Query(default=100, ge=1, le=1000), window_date: date | None = None):
     with closing(get_connection()) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -91,12 +91,14 @@ def get_zone_history(limit: int = Query(default=100, ge=1, le=1000)):
                            total_grid_import_kwh, renewable_contribution_pct,
                            meter_readings
                     FROM zone_energy_metrics
+                    WHERE (%s::date IS NULL OR
+                           (window_end >= %s::date AND window_end < %s::date + INTERVAL '1 day'))
                     ORDER BY window_end DESC, grid_zone, window_start DESC
                     LIMIT %s
                 ) AS recent
                 ORDER BY window_end, grid_zone, window_start;
                 """,
-                (limit,),
+                (window_date, window_date, window_date, limit),
             )
             return cursor.fetchall()
 
@@ -124,7 +126,12 @@ def get_renewable_alerts():
             )
     logger.info("renewable alert check completed zones_checked=%s alerts_found=%s",
                 len(zones), len(alerts))
-    return {"threshold_pct": threshold, "alerts": alerts}
+    return {
+    "threshold_pct": threshold,
+    "active_start_hour": start_hour,
+    "active_end_hour": end_hour,
+    "alerts": alerts,
+    }
 
 
 @app.get("/api/v1/billing/daily")

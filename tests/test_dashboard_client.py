@@ -37,3 +37,14 @@ def test_http_error_is_not_empty_data(monkeypatch):
     monkeypatch.setattr(api_client.requests, "get", Mock(return_value=response))
     with pytest.raises(api_client.APIError, match="503"):
         api_client.get_daily_billing(date(2026, 1, 1))
+
+
+def test_history_accepts_selected_date(monkeypatch):
+    response = Mock(status_code=200)
+    response.json.return_value = []
+    get = Mock(return_value=response)
+    monkeypatch.setattr(api_client.requests, "get", get)
+    assert api_client.get_zone_history(1000, date(2026, 1, 1)) == []
+    assert get.call_args.kwargs["params"] == {
+        "limit": 1000, "window_date": "2026-01-01",
+    }

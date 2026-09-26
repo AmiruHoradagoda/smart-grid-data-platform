@@ -26,10 +26,11 @@ Use existing data for a reliable, read-only demo. Have FastAPI running with
   ```powershell
   uv run streamlit run dashboard/app.py
   ```
-  Show API health, energy KPI cards, Energy Flow Over Time, zone energy balance,
+  Show the simulated timestamp, select a date and drag across the energy chart.
+  Show the updated KPI cards, zone energy balance,
   renewable contribution, operational insights, and API-provided alerts.
   Explain simulated window timestamps and any partial history warning.
-  Select January 1, 2026 for household billing, compare tariff-tier averages,
+  Open Daily billing and select January 1, 2026 for household billing, compare tariff-tier averages,
   and show the billing table. Try a missing date to show the friendly empty state.
   Use Refresh Dashboard to request fresh results.
 - [ ] **8-9 min: API.** Briefly show `/health` or Swagger at

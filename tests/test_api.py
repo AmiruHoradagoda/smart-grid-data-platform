@@ -93,7 +93,7 @@ def test_zone_history(api, query, expected_limit):
     response = client.get("/api/v1/zones/history" + query)
     assert response.status_code == 200
     assert [r["window_end"] for r in response.json()] == ["2026-01-01T10:00:00", "2026-01-01T11:00:00"]
-    assert cursor.execute.call_args.args[1] == (expected_limit,)
+    assert cursor.execute.call_args.args[1] == (None, None, None, expected_limit)
     connection.close.assert_called_once()
 
 
@@ -112,6 +112,21 @@ def test_zone_history_failure_cleanup(api):
     connection.close.assert_called_once()
 
 
+def test_zone_history_date_filter(api):
+    client, connection, cursor, _ = api
+    response = client.get("/api/v1/zones/history?limit=1000&window_date=2026-01-01")
+    assert response.status_code == 200
+    day = date(2026, 1, 1)
+    assert cursor.execute.call_args.args[1] == (day, day, day, 1000)
+    connection.close.assert_called_once()
+
+
+def test_zone_history_invalid_date(api):
+    client, _, _, connect = api
+    assert client.get("/api/v1/zones/history?window_date=invalid").status_code == 422
+    connect.assert_not_called()
+
+
 @pytest.mark.parametrize("hour,pct,expected", [
     (10, 14.8, True), (10, 25, False), (10, 20, False),
     (5, 10, False), (6, 10, True), (17, 10, True), (18, 10, False),
@@ -124,10 +139,21 @@ def test_renewable_alerts(api, caplog, hour, pct, expected):
     with caplog.at_level("INFO", logger=main.__name__):
         response = client.get("/api/v1/alerts/renewable")
     assert response.status_code == 200
-    assert response.json() == {"threshold_pct": 20, "alerts": [
-        {"grid_zone": "ZONE-B", "window_end": timestamp.isoformat(),
-         "renewable_contribution_pct": pct, "status": "LOW_RENEWABLE"}
-    ] if expected else []}
+    assert response.json() == {
+        "threshold_pct": 20,
+        "active_start_hour": 6,
+        "active_end_hour": 18,
+        "alerts": [
+            {
+                "grid_zone": "ZONE-B",
+                "window_end": timestamp.isoformat(),
+                "renewable_contribution_pct": pct,
+                "status": "LOW_RENEWABLE",
+            }
+        ]
+        if expected
+        else [],
+}
     assert "zones_checked=1" in caplog.text
     assert ("low renewable contribution" in caplog.text) == expected
     connection.close.assert_called_once()
@@ -135,7 +161,14 @@ def test_renewable_alerts(api, caplog, hour, pct, expected):
 
 def test_alerts_empty_database(api):
     client, connection, _, _ = api
-    assert client.get("/api/v1/alerts/renewable").json() == {"threshold_pct": 20, "alerts": []}
+    assert client.get(
+        "/api/v1/alerts/renewable"
+    ).json() == {
+        "threshold_pct": 20,
+        "active_start_hour": 6,
+        "active_end_hour": 18,
+        "alerts": [],
+    }
     connection.close.assert_called_once()
 
 

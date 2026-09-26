@@ -34,8 +34,11 @@ def get_latest_zones():
     return _get("/api/v1/zones/latest")
 
 
-def get_zone_history(limit=100):
-    return _get("/api/v1/zones/history", {"limit": limit})
+def get_zone_history(limit=100, window_date=None):
+    params = {"limit": limit}
+    if window_date is not None:
+        params["window_date"] = window_date.isoformat()
+    return _get("/api/v1/zones/history", params)
 
 
 def get_daily_billing(billing_date):

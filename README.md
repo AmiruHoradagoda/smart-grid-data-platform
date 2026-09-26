@@ -213,12 +213,14 @@ Start FastAPI first, then open another terminal:
 uv run streamlit run dashboard/app.py
 ```
 
-Open http://localhost:8501. Select a billing date (default January 1, 2026), and
-use **Refresh Dashboard** to clear the 15-second cache. No automatic polling is
-performed. The trend chart shows up to 100 windows from 300 recent zone rows;
-partial windows and differing latest zone times are flagged. Simulated timestamps
-are shown explicitly, and API health does not imply the pipeline is producing
-new data. Missing billing dates and unavailable services show friendly messages.
+Open http://localhost:8501. The top-right clock shows the latest stored simulated
+reading. Choose a date and time range, or drag across the energy chart to inspect
+a narrower period. KPI totals and zone comparisons update for that selection.
+Incomplete zone intervals are excluded. History requests filter by `window_date`
+and return at most 1,000 rows for that day; a notice appears at the limit.
+The Daily billing tab uses the selected date's full-day bills, independently of
+the energy time range. Latest renewable alerts are shown separately when present.
+Refresh clears the 15-second cache; there is no automatic polling.
 
 To use another API address, set it before starting Streamlit:
 
