@@ -83,6 +83,35 @@ def test_latest_zones(api):
     connection.close.assert_called_once()
 
 
+@pytest.mark.parametrize("query,expected_limit", [("", 100), ("?limit=3", 3)])
+def test_zone_history(api, query, expected_limit):
+    client, connection, cursor, _ = api
+    cursor.fetchall.return_value = [
+        {"grid_zone": "ZONE-A", "window_end": datetime(2026, 1, 1, 10)},
+        {"grid_zone": "ZONE-A", "window_end": datetime(2026, 1, 1, 11)},
+    ]
+    response = client.get("/api/v1/zones/history" + query)
+    assert response.status_code == 200
+    assert [r["window_end"] for r in response.json()] == ["2026-01-01T10:00:00", "2026-01-01T11:00:00"]
+    assert cursor.execute.call_args.args[1] == (expected_limit,)
+    connection.close.assert_called_once()
+
+
+@pytest.mark.parametrize("limit", ["0", "-1", "1001", "abc"])
+def test_zone_history_invalid_limit(api, limit):
+    client, _, _, connect = api
+    assert client.get(f"/api/v1/zones/history?limit={limit}").status_code == 422
+    connect.assert_not_called()
+
+
+def test_zone_history_failure_cleanup(api):
+    client, connection, cursor, _ = api
+    cursor.execute.side_effect = psycopg2.OperationalError("query failed")
+    with pytest.raises(psycopg2.OperationalError):
+        client.get("/api/v1/zones/history")
+    connection.close.assert_called_once()
+
+
 @pytest.mark.parametrize("hour,pct,expected", [
     (10, 14.8, True), (10, 25, False), (10, 20, False),
     (5, 10, False), (6, 10, True), (17, 10, True), (18, 10, False),

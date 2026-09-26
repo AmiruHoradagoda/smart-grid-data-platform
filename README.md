@@ -22,6 +22,7 @@ flowchart TD
     B --> D[(daily_household_billing)]
     Z --> API[FastAPI]
     D --> API
+    API --> Dashboard[Streamlit Dashboard]
 ```
 
 The four data tables live in PostgreSQL database `smart_grid`. Airflow keeps its
@@ -38,6 +39,7 @@ and Airflow. **FastAPI and the two producers currently run on the host.**
 | PostgreSQL 16 | Stores reference data, energy summaries, bills, and Airflow metadata |
 | Airflow 3.3.1 (Docker) | Schedules tariff ingestion and daily billing |
 | FastAPI | Exposes stored metrics and billing through HTTP and Swagger UI |
+| Streamlit / Plotly / requests | Presents API data as interactive energy and billing charts |
 | Docker Compose | Runs the infrastructure on one local network |
 
 ## Sources and simulation
@@ -116,6 +118,7 @@ Base URL: `http://127.0.0.1:8000`. These are the implemented GET endpoints:
 | --- | --- |
 | `/health` | Database connectivity; 200 when healthy, 503 on failure |
 | `/api/v1/zones/latest` | Latest stored window per zone |
+| `/api/v1/zones/history?limit=100` | Recent zone rows in chronological order; limit 1–1000 |
 | `/api/v1/billing/daily?billing_date=2026-01-01` | Bills for a date; 404 if absent, 422 for an invalid/missing date |
 | `/api/v1/households/HH-001/billing` | Household billing history; 404 if absent |
 
@@ -196,6 +199,36 @@ them locally (do not include them in screenshots or submissions):
 ```powershell
 docker exec smart-grid-airflow cat /opt/airflow/simple_auth_manager_passwords.json.generated
 ```
+
+## Dashboard
+
+The host-run Streamlit dashboard reads **FastAPI → Streamlit**, with no direct
+database connection. It shows energy KPI cards, consumption/solar/grid trends,
+zone comparisons, renewable contribution and API-provided alerts, plus daily
+household bills and average bills by tariff tier. All data is simulated.
+
+Start FastAPI first, then open another terminal:
+
+```powershell
+uv run streamlit run dashboard/app.py
+```
+
+Open http://localhost:8501. Select a billing date (default January 1, 2026), and
+use **Refresh Dashboard** to clear the 15-second cache. No automatic polling is
+performed. The trend chart shows up to 100 windows from 300 recent zone rows;
+partial windows and differing latest zone times are flagged. Simulated timestamps
+are shown explicitly, and API health does not imply the pipeline is producing
+new data. Missing billing dates and unavailable services show friendly messages.
+
+To use another API address, set it before starting Streamlit:
+
+```powershell
+$env:SMART_GRID_API_URL = "http://127.0.0.1:8000"
+```
+
+Dependencies: Streamlit for the page, Plotly for interactive charts, requests for
+HTTP calls with five-second timeouts. Billing and alert decisions remain in the
+backend; the dashboard only aggregates returned data for presentation.
 
 ## Tests and validation
 

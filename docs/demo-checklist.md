@@ -2,7 +2,8 @@
 
 Prepare dependencies with `uv sync` and run `uv run pytest` before presenting.
 Use existing data for a reliable, read-only demo. Have FastAPI running with
-`uv run uvicorn src.api.main:app --reload` and open its `/docs` page.
+`uv run uvicorn src.api.main:app --reload` and start the dashboard in a separate terminal with
+`uv run streamlit run dashboard/app.py`. Open http://localhost:8501.
 
 - [ ] **0–1 min: Architecture.** Show the README diagram and explain streaming
   versus batch processing, joined on household/date for billing.
@@ -19,30 +20,23 @@ Use existing data for a reliable, read-only demo. Have FastAPI running with
   ```
 - [ ] **2–3 min: Spark.** Run `docker compose logs --tail=20 spark`. Explain
   five-minute windows, the watermark, and finalized daily summaries.
-- [ ] **3–4 min: PostgreSQL.** Show recent zone results and available daily dates:
+- [ ] **3-4 min: Airflow.** Show tariff ingestion and daily billing DAG status
+  at http://localhost:8080. Show an existing tariff CSV, without regenerating it.
+- [ ] **4-8 min: Dashboard.** Open http://localhost:8501 after starting:
   ```powershell
-  docker exec smart-grid-postgres psql -U smartgrid -d smart_grid -c "SELECT grid_zone, window_end, renewable_contribution_pct FROM zone_energy_metrics ORDER BY window_end DESC LIMIT 3;"
-  docker exec smart-grid-postgres psql -U smartgrid -d smart_grid -c "SELECT energy_date, COUNT(*) FROM household_daily_energy GROUP BY energy_date ORDER BY energy_date;"
+  uv run streamlit run dashboard/app.py
   ```
-- [ ] **4–5 min: Tariffs and Airflow.** Show `Get-ChildItem data/tariffs` and
-  `Get-Content data/tariffs/tariffs_2026-01-01.csv -TotalCount 5`. Show both DAGs
-  in http://localhost:8080, their schedules, and successful run history.
-  The generator command is `uv run python -m src.producers.tariff_generator`;
-  do not rerun it against existing files during the read-only demo.
-- [ ] **5–6 min: Reconciliation and billing.**
-  ```powershell
-  docker exec smart-grid-postgres psql -U smartgrid -d smart_grid -c "SELECT effective_date, COUNT(*) FROM tariff_reference GROUP BY effective_date ORDER BY effective_date;"
-  docker exec smart-grid-postgres psql -U smartgrid -d smart_grid -c "SELECT energy_date, household_id, total_grid_import_kwh, tariff_rate, estimated_bill_lkr FROM daily_household_billing ORDER BY energy_date, household_id LIMIT 5;"
-  ```
-- [ ] **6–8 min: API.** In http://127.0.0.1:8000/docs, run `/health`, latest
-  zones, daily bills for a date shown above, and household `HH-001` history.
-  Explain 404 for absent data and 422 for invalid dates.
-- [ ] **8-9 min: Alerts.** Run `/api/v1/alerts/renewable` in Swagger. Explain
-  the strict 20% threshold and 06:00-18:00 period using stored `window_end`.
-  An empty list is valid at night or for zones meeting the threshold. The mocked
-  tests demonstrate a low-renewable daylight case without modifying stored data.
-- [ ] **9-10 min: Tests.** Run `uv run pytest`; explain mocked connections,
-  temporary CSVs, tariff reproducibility, and alert boundary tests.
+  Show API health, energy KPI cards, Energy Flow Over Time, zone energy balance,
+  renewable contribution, operational insights, and API-provided alerts.
+  Explain simulated window timestamps and any partial history warning.
+  Select January 1, 2026 for household billing, compare tariff-tier averages,
+  and show the billing table. Try a missing date to show the friendly empty state.
+  Use Refresh Dashboard to request fresh results.
+- [ ] **8-9 min: API.** Briefly show `/health` or Swagger at
+  http://127.0.0.1:8000/docs. Explain Streamlit reads FastAPI; it does not access
+  PostgreSQL or implement separate billing/alert decisions.
+- [ ] **9-10 min: Tests.** Run `uv run pytest`; explain mocked database tests,
+  alert boundaries, tariff reproducibility, and bounded history requests.
 
 For a fresh live demonstration, start both generators together before presenting
 and allow more than five minutes plus Airflow scheduling time for billing.

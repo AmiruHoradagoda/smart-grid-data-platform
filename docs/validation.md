@@ -95,3 +95,20 @@ docker exec smart-grid-airflow python -c "from airflow.sdk import dag, task; imp
 Unit tests do not run Spark or billing SQL and do not require live services.
 The SQL checks above validate stored results separately. No unused copies of
 production formulas were added just to make a unit test pass.
+
+
+## Dashboard
+
+With FastAPI already running:
+
+```powershell
+Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/zones/history?limit=300'
+uv run streamlit run dashboard/app.py
+```
+
+Open http://localhost:8501. Verify energy KPIs, the trend line chart, zone energy
+bars, renewable bars, alerts, and billing charts/table for January 1, 2026.
+Choose a missing billing date and confirm an information message appears.
+Refresh clears cached requests. The dashboard performs no writes and does not
+require restarting generators. A healthy API does not imply fresh simulated data.
+For another backend, set `SMART_GRID_API_URL` before launching Streamlit.

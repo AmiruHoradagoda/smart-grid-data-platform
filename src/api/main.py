@@ -4,7 +4,7 @@ import logging
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 
 from utils.config_loader import Config
 
@@ -77,6 +77,28 @@ def get_latest_zone_metrics():
 
     finally:
         connection.close()
+
+
+@app.get("/api/v1/zones/history")
+def get_zone_history(limit: int = Query(default=100, ge=1, le=1000)):
+    with closing(get_connection()) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT * FROM (
+                    SELECT window_start, window_end, grid_zone,
+                           total_consumption_kwh, total_solar_generation_kwh,
+                           total_grid_import_kwh, renewable_contribution_pct,
+                           meter_readings
+                    FROM zone_energy_metrics
+                    ORDER BY window_end DESC, grid_zone, window_start DESC
+                    LIMIT %s
+                ) AS recent
+                ORDER BY window_end, grid_zone, window_start;
+                """,
+                (limit,),
+            )
+            return cursor.fetchall()
 
 
 @app.get("/api/v1/alerts/renewable")
