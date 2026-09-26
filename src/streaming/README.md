@@ -23,7 +23,7 @@ Aggregate by grid zone
         ↓
 Calculate renewable contribution
         ↓
-Print zone-level metrics
+Write zone metrics to PostgreSQL
 ```
 
 The purpose is to answer:
@@ -459,8 +459,7 @@ Meter Readings          = 7
 - A 5-minute simulated-time window is used.
 - A 10-minute watermark is used for late events.
 - `meter_readings` counts events, not unique households.
-- Results are currently printed to the Spark console for verification.
-- Persistent storage will be added in the next stage.
+- Finalized zone and daily household summaries are stored in PostgreSQL.
 
 ---
 
@@ -479,11 +478,9 @@ grid import calculation
 10-minute watermark
 zone aggregation
 renewable contribution calculation
-console output
+PostgreSQL output
 ```
 
-Next stage:
-
-```text
-Store the aggregated metrics in PostgreSQL.
-```
+A second streaming query stores daily household totals in `household_daily_energy`.
+Both queries use persistent checkpoints. See the [main README](../../README.md)
+for current startup and validation instructions.

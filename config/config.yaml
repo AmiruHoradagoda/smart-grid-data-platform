@@ -136,3 +136,8 @@ postgres:
 
   tables:
     zone_energy_metrics: "zone_energy_metrics"
+
+alerts:
+  low_renewable_threshold_pct: 20
+  active_start_hour: 6
+  active_end_hour: 18

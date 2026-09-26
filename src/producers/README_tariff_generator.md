@@ -47,7 +47,7 @@ Example:
 household_id,tariff_rate,billing_tier,subsidy_flag,effective_date
 HH-001,42.0,STANDARD,false,2026-01-01
 HH-002,32.0,SUBSIDIZED,true,2026-01-01
-HH-003,48.0,HIGH_USAGE,false,2026-01-01
+HH-003,48.0,PREMIUM,false,2026-01-01
 ```
 
 ## Household Tariff Profiles
@@ -60,7 +60,7 @@ Current billing tiers are:
 |---|---:|---|
 | `SUBSIDIZED` | 32 LKR/kWh | Yes |
 | `STANDARD` | 42 LKR/kWh | No |
-| `HIGH_USAGE` | 48 LKR/kWh | No |
+| `PREMIUM` | 48 LKR/kWh | No |
 
 These values come from:
 
@@ -79,7 +79,7 @@ Example:
 ```text
 SUBSIDIZED = 4 households
 STANDARD   = 12 households
-HIGH_USAGE = 4 households
+PREMIUM = 4 households
 ```
 
 Total:
@@ -102,49 +102,11 @@ If they do not match, the application raises an error.
 
 This prevents incorrect configuration where some households would not receive a tariff profile.
 
-## Random but Reproducible Assignment
+## Random assignment
 
-The tariff tiers are randomly distributed across households.
-
-Example:
-
-```text
-HH-001 -> STANDARD
-HH-002 -> HIGH_USAGE
-HH-003 -> SUBSIDIZED
-HH-004 -> STANDARD
-```
-
-A fixed random seed is used:
-
-```text
-RANDOM_SEED = 42
-```
-
-Conceptually:
-
-```python
-rng = random.Random(RANDOM_SEED)
-rng.shuffle(tiers)
-```
-
-### Why use a fixed seed?
-
-The assignment should look random, but the same household should receive the same tariff tier after restarting the application.
-
-Example:
-
-```text
-Run 1:
-HH-001 -> STANDARD
-
-Run 2:
-HH-001 -> STANDARD
-```
-
-This makes the simulation reproducible and easier to test.
-
-The seed is used only for tariff-profile assignment.
+The generator reads `tariff.random_seed`, which is currently absent from YAML.
+Assignments therefore remain fixed within a run but may change after restarting.
+The solar-selection seed of 42 is separate.
 
 ## Tariff Rate Selection
 
@@ -157,7 +119,7 @@ If tier = SUBSIDIZED
 If tier = STANDARD
     tariff_rate = 42
 
-If tier = HIGH_USAGE
+If tier = PREMIUM
     tariff_rate = 48
 ```
 
@@ -174,7 +136,7 @@ The subsidy flag indicates whether the household belongs to the subsidized billi
 ```text
 SUBSIDIZED -> subsidy_flag = true
 STANDARD   -> subsidy_flag = false
-HIGH_USAGE -> subsidy_flag = false
+PREMIUM -> subsidy_flag = false
 ```
 
 ### Purpose
@@ -309,14 +271,14 @@ HH-005,42.0,STANDARD,false,2026-01-01
 - Tariff rates are not real utility rates.
 - Every household receives exactly one billing tier.
 - Total tariff-tier household counts must equal the total number of households.
-- A fixed random seed keeps household tier assignments reproducible.
+- Tariff assignments may change on restart because `tariff.random_seed` is unset.
 - The tariff profile remains the same between simulated days for now.
 - One tariff CSV is generated per simulated day.
 - Five real minutes represent one simulated day.
 - Tariff changes over time are not modelled yet.
-- The generator only creates files; Airflow will process and load them later.
+- The generator creates files; the implemented Airflow DAG loads all tariff CSVs.
 
-## Next Stage
+## Implemented Downstream Pipeline
 
 ```text
 Tariff CSV

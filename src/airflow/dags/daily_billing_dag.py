@@ -2,7 +2,7 @@ from datetime import datetime
 
 import psycopg2
 
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 
 from utils.config_loader import Config
 

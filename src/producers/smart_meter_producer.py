@@ -174,7 +174,7 @@ def build_households():
 
         grid_zone = GRID_ZONES[
             (index - 1) % len(GRID_ZONES)
-        ] # give zone's that ranage between (0,len(GRID_ZONES)+1)
+        ]  # Assign households to zones in round-robin order.
 
         base_load = random.uniform(0.15, 0.45)
 

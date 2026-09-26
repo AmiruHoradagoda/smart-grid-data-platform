@@ -1,7 +1,7 @@
 [project]
 name = "smart-grid-data-platform"
 version = "0.1.0"
-description = "Add your description here"
+description = "Simulated smart-grid energy monitoring and daily household billing"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -13,3 +13,13 @@ dependencies = [
     "pyyaml>=6.0.3",
     "uvicorn[standard]>=0.54.0",
 ]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
