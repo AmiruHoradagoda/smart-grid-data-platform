@@ -59,7 +59,7 @@ def build_tariff_profiles():
             {
                 "household_id": household_id,
                 "billing_tier": tier,
-                "tariff_rate": TARIFFS[tier],
+                "tariff_rate": TARIFF_TIERS[tier],
                 "subsidy_flag":
                     tier == "SUBSIDIZED",
             }
