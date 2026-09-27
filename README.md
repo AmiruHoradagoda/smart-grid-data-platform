@@ -232,6 +232,14 @@ Dependencies: Streamlit for the page, Plotly for interactive charts, requests fo
 HTTP calls with five-second timeouts. Billing and alert decisions remain in the
 backend; the dashboard only aggregates returned data for presentation.
 
+## GitHub Codespaces
+
+The repository includes a dev-container configuration with Python 3.12,
+Docker-in-Docker, Docker Compose, `uv`, and forwarded ports for FastAPI, Airflow,
+and Streamlit. A 4-core, 16 GB Codespace is recommended for running the complete
+stack. See the [Codespaces guide](docs/codespaces.md) for the Linux setup and run
+commands.
+
 ## Tests and validation
 
 ```powershell
