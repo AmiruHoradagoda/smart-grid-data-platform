@@ -118,6 +118,16 @@ spark:
   household_checkpoint_location: "/opt/spark-checkpoints/household-daily-energy"
 
 # ============================================================
+# Batch orchestration
+# ============================================================
+
+orchestration:
+  tariff_ingestion_schedule: "*/5 * * * *"
+  # This is a lightweight dispatcher. Simulated dates become eligible through
+  # daily_pipeline_status, not through the real-time cron schedule.
+  billing_dispatch_schedule: "* * * * *"
+
+# ============================================================
 # PostgreSQL
 # ============================================================
 
