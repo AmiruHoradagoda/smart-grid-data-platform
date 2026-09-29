@@ -779,6 +779,7 @@ class DockerManager:
                         "airflow",
                         "dags",
                         "unpause",
+                        "-y",
                         dag_id,
                     ]
                 ),

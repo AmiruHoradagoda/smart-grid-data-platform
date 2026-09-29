@@ -106,3 +106,22 @@ def test_factory_reset_command_is_explicit():
         "-v",
         "--remove-orphans",
     )
+
+
+def test_airflow_unpause_is_non_interactive():
+    runner = FakeRunner()
+    manager = DockerManager(runner=runner)
+
+    manager.unpause_dags()
+
+    assert runner.calls[-2][0] == (
+        "docker",
+        "exec",
+        "smart-grid-airflow",
+        "airflow",
+        "dags",
+        "unpause",
+        "-y",
+        "tariff_ingestion",
+    )
+    assert runner.calls[-1][0][-2:] == ("-y", "daily_billing")
