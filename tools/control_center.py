@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from queue import Empty, Queue
+import json
 import sys
 import threading
 import tkinter as tk
@@ -20,6 +21,7 @@ from tools.control_center_core import (  # noqa: E402
     CommandError,
     DockerManager,
     HostProcessManager,
+    KafkaInspector,
     fetch_pipeline_status,
 )
 
@@ -38,6 +40,7 @@ class ControlCenter:
 
         self.docker = DockerManager()
         self.host = HostProcessManager()
+        self.kafka = KafkaInspector()
         self.ui_queue: Queue[tuple[object, tuple[object, ...]]] = Queue()
         self.action_lock = threading.Lock()
         self.refresh_lock = threading.Lock()
@@ -49,6 +52,11 @@ class ControlCenter:
         self.log_source_var = tk.StringVar(value="spark")
         self.container_service_var = tk.StringVar(value="spark")
         self.dag_var = tk.StringVar(value="daily_billing")
+        self.kafka_limit_var = tk.IntVar(value=12)
+        self.kafka_summary_var = tk.StringVar(
+            value="Start Kafka and bootstrap the topic, then refresh this view."
+        )
+        self.kafka_event_raw: dict[str, str] = {}
 
         self._configure_style()
         self._build_ui()
@@ -110,11 +118,14 @@ class ControlCenter:
         notebook.pack(fill="both", expand=True, pady=5)
 
         overview = ttk.Frame(notebook, padding=8)
+        kafka_tab = ttk.Frame(notebook, padding=8)
         logs_tab = ttk.Frame(notebook, padding=8)
         notebook.add(overview, text="Overview")
+        notebook.add(kafka_tab, text="Kafka Inspector")
         notebook.add(logs_tab, text="Recent logs")
 
         self._build_overview(overview)
+        self._build_kafka_inspector(kafka_tab)
         self._build_logs(logs_tab)
 
         status = ttk.Frame(outer)
@@ -269,6 +280,105 @@ class ControlCenter:
             self.pipeline_tree.column(column, width=width, anchor="w" if column == "error" else "center")
         self.pipeline_tree.pack(fill="both", expand=True)
 
+    def _build_kafka_inspector(self, parent: ttk.Frame) -> None:
+        controls = ttk.Frame(parent)
+        controls.pack(fill="x", pady=(0, 6))
+        ttk.Button(
+            controls,
+            text="Refresh Kafka view",
+            command=self.refresh_kafka_inspector,
+        ).pack(side="left")
+        ttk.Label(controls, text="Recent events:").pack(side="left", padx=(12, 4))
+        ttk.Combobox(
+            controls,
+            textvariable=self.kafka_limit_var,
+            values=(6, 12, 24),
+            state="readonly",
+            width=5,
+        ).pack(side="left")
+        ttk.Label(
+            controls,
+            text="Read-only snapshot; no consumer offsets are committed.",
+            foreground="#555555",
+        ).pack(side="right")
+
+        ttk.Label(
+            parent,
+            textvariable=self.kafka_summary_var,
+        ).pack(fill="x", pady=(0, 6))
+
+        partition_frame = ttk.LabelFrame(
+            parent,
+            text="Topic partitions",
+            padding=6,
+            style="Section.TLabelframe",
+        )
+        partition_frame.pack(fill="x", pady=(0, 7))
+        self.kafka_partition_tree = ttk.Treeview(
+            partition_frame,
+            columns=("partition", "earliest", "next", "retained"),
+            show="headings",
+            height=3,
+        )
+        for column, label, width in (
+            ("partition", "Partition", 100),
+            ("earliest", "Earliest offset", 150),
+            ("next", "Next offset", 150),
+            ("retained", "Approx. retained messages", 200),
+        ):
+            self.kafka_partition_tree.heading(column, text=label)
+            self.kafka_partition_tree.column(column, width=width, anchor="center")
+        self.kafka_partition_tree.pack(fill="x")
+
+        events_frame = ttk.LabelFrame(
+            parent,
+            text="Recent retained events",
+            padding=6,
+            style="Section.TLabelframe",
+        )
+        events_frame.pack(fill="both", expand=True)
+        self.kafka_event_tree = ttk.Treeview(
+            events_frame,
+            columns=(
+                "partition",
+                "offset",
+                "key",
+                "household",
+                "zone",
+                "timestamp",
+                "consumption",
+                "solar",
+            ),
+            show="headings",
+            height=11,
+        )
+        for column, label, width in (
+            ("partition", "Partition", 70),
+            ("offset", "Offset", 80),
+            ("key", "Kafka key", 100),
+            ("household", "Household", 90),
+            ("zone", "Zone", 80),
+            ("timestamp", "Simulated timestamp", 235),
+            ("consumption", "Consumption kWh", 120),
+            ("solar", "Solar kWh", 90),
+        ):
+            self.kafka_event_tree.heading(column, text=label)
+            self.kafka_event_tree.column(column, width=width, anchor="center")
+        self.kafka_event_tree.pack(fill="both", expand=True)
+        self.kafka_event_tree.bind("<<TreeviewSelect>>", self._show_selected_kafka_event)
+
+        ttk.Label(events_frame, text="Selected event JSON:").pack(
+            anchor="w", pady=(7, 2)
+        )
+        self.kafka_raw_text = scrolledtext.ScrolledText(
+            events_frame,
+            wrap="word",
+            font=("Consolas", 9),
+            height=7,
+            state="disabled",
+        )
+        self.kafka_raw_text.pack(fill="both", expand=True)
+
     def _build_logs(self, parent: ttk.Frame) -> None:
         controls = ttk.Frame(parent)
         controls.pack(fill="x", pady=(0, 6))
@@ -333,6 +443,74 @@ class ControlCenter:
 
     def _clear_log_view(self) -> None:
         self._replace_log("")
+
+    def _set_kafka_raw(self, text: str) -> None:
+        self.kafka_raw_text.configure(state="normal")
+        self.kafka_raw_text.delete("1.0", "end")
+        self.kafka_raw_text.insert("1.0", text)
+        self.kafka_raw_text.configure(state="disabled")
+
+    def _show_selected_kafka_event(self, _event: object = None) -> None:
+        selection = self.kafka_event_tree.selection()
+        if not selection:
+            self._set_kafka_raw("")
+            return
+
+        raw_value = self.kafka_event_raw.get(selection[0], "")
+        try:
+            formatted = json.dumps(json.loads(raw_value), indent=2)
+        except (json.JSONDecodeError, TypeError):
+            formatted = raw_value
+        self._set_kafka_raw(formatted)
+
+    def _apply_kafka_snapshot(self, partitions: list[object], events: list[object]) -> None:
+        for item in self.kafka_partition_tree.get_children():
+            self.kafka_partition_tree.delete(item)
+        for partition in partitions:
+            self.kafka_partition_tree.insert(
+                "",
+                "end",
+                values=(
+                    partition.partition,
+                    partition.earliest_offset,
+                    partition.next_offset,
+                    partition.retained_messages,
+                ),
+            )
+
+        for item in self.kafka_event_tree.get_children():
+            self.kafka_event_tree.delete(item)
+        self.kafka_event_raw.clear()
+        self._set_kafka_raw("")
+
+        for event in events:
+            item = self.kafka_event_tree.insert(
+                "",
+                "end",
+                values=(
+                    event.partition,
+                    event.offset,
+                    event.key,
+                    event.household_id,
+                    event.grid_zone,
+                    event.event_timestamp,
+                    event.consumption_kwh,
+                    event.solar_kwh,
+                ),
+            )
+            self.kafka_event_raw[item] = event.raw_value
+
+        total_retained = sum(partition.retained_messages for partition in partitions)
+        self.kafka_summary_var.set(
+            f"Topic: {self.kafka.topic} | Partitions: {len(partitions)} | "
+            f"Approx. retained events: {total_retained:,} | Displayed: {len(events)}"
+        )
+
+        if events:
+            first = self.kafka_event_tree.get_children()[0]
+            self.kafka_event_tree.selection_set(first)
+            self.kafka_event_tree.focus(first)
+            self._show_selected_kafka_event()
 
     def _run_action(self, label: str, worker: object) -> None:
         if not self.action_lock.acquire(blocking=False):
@@ -600,6 +778,18 @@ class ControlCenter:
             return ""
 
         self._run_action(f"Load {source} logs", worker)
+
+    def refresh_kafka_inspector(self) -> None:
+        limit = int(self.kafka_limit_var.get())
+
+        def worker() -> str:
+            partitions, events = self.kafka.snapshot(limit=limit)
+            self._post(self._apply_kafka_snapshot, partitions, events)
+            if events:
+                return f"Loaded {len(events)} recent Kafka events."
+            return "Kafka topic is available but currently contains no retained events."
+
+        self._run_action("Refresh Kafka view", worker)
 
     def _on_close(self) -> None:
         answer = messagebox.askyesnocancel(

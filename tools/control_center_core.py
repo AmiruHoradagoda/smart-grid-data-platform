@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import os
 import signal
 import socket
@@ -13,6 +14,7 @@ import sys
 import threading
 import time
 from typing import Callable, Iterable
+import uuid
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +51,216 @@ class CommandResult:
 
 class CommandError(RuntimeError):
     """Raised when an allowed project command fails."""
+
+
+@dataclass(frozen=True)
+class KafkaPartitionInfo:
+    """Read-only offset information for one Kafka topic partition."""
+
+    partition: int
+    earliest_offset: int
+    next_offset: int
+
+    @property
+    def retained_messages(self) -> int:
+        return max(0, self.next_offset - self.earliest_offset)
+
+
+@dataclass(frozen=True)
+class KafkaEventSample:
+    """A compact, display-friendly view of one retained Kafka event."""
+
+    partition: int
+    offset: int
+    key: str
+    household_id: str
+    grid_zone: str
+    event_timestamp: str
+    consumption_kwh: str
+    solar_kwh: str
+    raw_value: str
+
+
+def decode_kafka_event(
+    partition: int,
+    offset: int,
+    key: bytes | str | None,
+    value: bytes | str | None,
+) -> KafkaEventSample:
+    """Decode one Kafka message without assuming its JSON is valid."""
+
+    def decode_text(item: bytes | str | None) -> str:
+        if item is None:
+            return ""
+        if isinstance(item, bytes):
+            return item.decode("utf-8", errors="replace")
+        return str(item)
+
+    key_text = decode_text(key)
+    raw_value = decode_text(value)
+
+    try:
+        payload = json.loads(raw_value)
+    except (json.JSONDecodeError, TypeError):
+        payload = {}
+
+    def display(field: str) -> str:
+        value = payload.get(field, "") if isinstance(payload, dict) else ""
+        return "" if value is None else str(value)
+
+    return KafkaEventSample(
+        partition=partition,
+        offset=offset,
+        key=key_text,
+        household_id=display("household_id"),
+        grid_zone=display("grid_zone"),
+        event_timestamp=display("timestamp"),
+        consumption_kwh=display("power_consumption_kwh"),
+        solar_kwh=display("solar_generation_kwh"),
+        raw_value=raw_value,
+    )
+
+
+def partition_sample_quotas(partitions: list[int], limit: int) -> dict[int, int]:
+    """Distribute a sample limit across partitions as evenly as possible."""
+
+    if limit < 1 or not partitions:
+        return {partition: 0 for partition in partitions}
+
+    base, remainder = divmod(limit, len(partitions))
+    return {
+        partition: base + (1 if index < remainder else 0)
+        for index, partition in enumerate(partitions)
+    }
+
+
+class KafkaInspector:
+    """Read recent Kafka records directly without committing consumer offsets."""
+
+    def __init__(
+        self,
+        bootstrap_servers: str = "localhost:9092",
+        topic: str = "smart-meter-readings",
+    ):
+        self.bootstrap_servers = bootstrap_servers
+        self.topic = topic
+
+    def snapshot(
+        self,
+        *,
+        limit: int = 12,
+        timeout_seconds: float = 6.0,
+    ) -> tuple[list[KafkaPartitionInfo], list[KafkaEventSample]]:
+        try:
+            from confluent_kafka import Consumer, KafkaError, TopicPartition
+        except ImportError as error:
+            raise CommandError(
+                "Kafka inspection requires the project's confluent-kafka dependency."
+            ) from error
+
+        consumer = Consumer(
+            {
+                "bootstrap.servers": self.bootstrap_servers,
+                "group.id": f"control-center-inspector-{uuid.uuid4()}",
+                "enable.auto.commit": False,
+                "allow.auto.create.topics": False,
+                "enable.partition.eof": True,
+            }
+        )
+
+        try:
+            metadata = consumer.list_topics(
+                topic=self.topic,
+                timeout=timeout_seconds,
+            )
+            topic_metadata = metadata.topics.get(self.topic)
+
+            if topic_metadata is None or topic_metadata.error is not None:
+                detail = topic_metadata.error if topic_metadata else "topic not found"
+                raise CommandError(
+                    f"Kafka topic {self.topic!r} is unavailable: {detail}"
+                )
+
+            partition_ids = sorted(topic_metadata.partitions)
+            if not partition_ids:
+                raise CommandError(f"Kafka topic {self.topic!r} has no partitions.")
+
+            partition_info: list[KafkaPartitionInfo] = []
+            watermarks: dict[int, tuple[int, int]] = {}
+
+            for partition in partition_ids:
+                earliest, next_offset = consumer.get_watermark_offsets(
+                    TopicPartition(self.topic, partition),
+                    timeout=timeout_seconds,
+                )
+                watermarks[partition] = (earliest, next_offset)
+                partition_info.append(
+                    KafkaPartitionInfo(
+                        partition=partition,
+                        earliest_offset=earliest,
+                        next_offset=next_offset,
+                    )
+                )
+
+            quotas = partition_sample_quotas(partition_ids, limit)
+            assignments = []
+            expected_by_partition: dict[int, int] = {}
+
+            for partition in partition_ids:
+                earliest, next_offset = watermarks[partition]
+                available = max(0, next_offset - earliest)
+                expected = min(available, quotas[partition])
+                expected_by_partition[partition] = expected
+                if expected:
+                    assignments.append(
+                        TopicPartition(
+                            self.topic,
+                            partition,
+                            next_offset - expected,
+                        )
+                    )
+
+            if not assignments:
+                return partition_info, []
+
+            consumer.assign(assignments)
+            samples: list[KafkaEventSample] = []
+            received = {partition: 0 for partition in partition_ids}
+            expected_total = sum(expected_by_partition.values())
+            deadline = time.monotonic() + timeout_seconds
+
+            while len(samples) < expected_total and time.monotonic() < deadline:
+                message = consumer.poll(0.25)
+                if message is None:
+                    continue
+                if message.error():
+                    if message.error().code() == KafkaError._PARTITION_EOF:
+                        continue
+                    raise CommandError(f"Kafka event read failed: {message.error()}")
+
+                partition = message.partition()
+                if received.get(partition, 0) >= expected_by_partition.get(partition, 0):
+                    continue
+
+                samples.append(
+                    decode_kafka_event(
+                        partition,
+                        message.offset(),
+                        message.key(),
+                        message.value(),
+                    )
+                )
+                received[partition] = received.get(partition, 0) + 1
+
+            samples.sort(key=lambda item: (item.partition, item.offset))
+            return partition_info, samples
+
+        except CommandError:
+            raise
+        except Exception as error:
+            raise CommandError(f"Kafka inspection failed: {error}") from error
+        finally:
+            consumer.close()
 
 
 class CommandRunner:

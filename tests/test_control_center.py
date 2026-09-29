@@ -4,9 +4,11 @@ from tools.control_center_core import (
     CommandResult,
     DockerManager,
     LogBuffer,
+    decode_kafka_event,
     host_service_specs,
     parse_engine_info,
     parse_stats,
+    partition_sample_quotas,
 )
 
 
@@ -45,6 +47,32 @@ def test_log_buffer_is_bounded():
     buffer.append("third")
 
     assert buffer.text() == "second\nthird"
+
+
+def test_decode_kafka_event_exposes_partition_offset_and_meter_fields():
+    event = decode_kafka_event(
+        2,
+        41,
+        b"HH-007",
+        (
+            b'{"household_id":"HH-007","grid_zone":"ZONE-A",'
+            b'"timestamp":"2026-01-01T12:00:00+00:00",'
+            b'"power_consumption_kwh":0.42,"solar_generation_kwh":0.18}'
+        ),
+    )
+
+    assert event.partition == 2
+    assert event.offset == 41
+    assert event.key == "HH-007"
+    assert event.household_id == "HH-007"
+    assert event.grid_zone == "ZONE-A"
+    assert event.consumption_kwh == "0.42"
+    assert event.solar_kwh == "0.18"
+
+
+def test_partition_sample_quotas_are_bounded_and_even():
+    assert partition_sample_quotas([0, 1, 2], 8) == {0: 3, 1: 3, 2: 2}
+    assert partition_sample_quotas([0, 1, 2], 0) == {0: 0, 1: 0, 2: 0}
 
 
 def test_host_commands_are_allowlisted_and_use_project_python():

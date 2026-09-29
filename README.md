@@ -249,7 +249,9 @@ docker exec smart-grid-airflow cat /opt/airflow/simple_auth_manager_passwords.js
 The lightweight Tkinter Control Center provides a graphical interface for the
 same local commands. It can start/bootstrap containers, manage host processes,
 show recent logs and pipeline readiness, open the project UIs, stop while keeping
-data, or perform an explicitly confirmed factory reset.
+data, or perform an explicitly confirmed factory reset. Its read-only **Kafka
+Inspector** shows partition offsets and a small recent-event sample without
+joining Spark's consumer group or committing offsets.
 
 ```powershell
 & .\.venv\Scripts\python.exe tools\control_center.py
