@@ -13,4 +13,6 @@ wheels/
 .env.*
 *.log
 *.tmp
+.runtime/*
+!.runtime/.gitkeep
 simple_auth_manager_passwords.json*
