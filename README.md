@@ -1,5 +1,5 @@
 # Smart Grid Energy Monitoring & Billing Platform
-
+A backup branch
 A university data engineering mini-project that simulates household electricity
 consumption and rooftop solar generation. It combines streaming grid monitoring
 with daily tariff reconciliation and estimated household billing, served through
