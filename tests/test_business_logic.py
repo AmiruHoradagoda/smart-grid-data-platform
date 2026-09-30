@@ -41,7 +41,11 @@ def test_household_profiles():
 def test_tariff_distribution_and_csv(tmp_path, monkeypatch):
     monkeypatch.setattr(tariff, "OUTPUT_DIRECTORY", tmp_path)
     profiles = tariff.build_tariff_profiles()
-    assert Counter(p["billing_tier"] for p in profiles) == {"SUBSIDIZED": 4, "STANDARD": 12, "PREMIUM": 4}
+    assert Counter(p["billing_tier"] for p in profiles) == {
+        "SUBSIDIZED": 4,
+        "STANDARD": 12,
+        "PREMIUM": 4,
+    }
     assert len({p["household_id"] for p in profiles}) == 20
     expected_rates = {"SUBSIDIZED": 32, "STANDARD": 42, "PREMIUM": 48}
     for profile in profiles:
@@ -67,13 +71,17 @@ def test_tariff_reproducibility():
 
 def test_configured_consumption(monkeypatch):
     from utils.config_loader import Config
-    monkeypatch.setitem(Config.get("smart_meter.consumption.multipliers"), "09_to_18", 1.5)
+
+    monkeypatch.setitem(
+        Config.get("smart_meter.consumption.multipliers"), "09_to_18", 1.5
+    )
     monkeypatch.setattr(meter.random, "uniform", lambda low, high: 1.0)
     assert meter.calculate_consumption(12, 2) == 3
 
 
 def test_configured_solar_boundaries(monkeypatch):
     from utils.config_loader import Config
+
     settings = Config.get("smart_meter.solar_generation")
     for key, value in [("sunrise_hour", 7), ("peak_hour", 11), ("sunset_hour", 17)]:
         monkeypatch.setitem(settings, key, value)

@@ -30,9 +30,7 @@ def test_parse_engine_info():
 
 
 def test_parse_stats_ignores_malformed_rows():
-    assert parse_stats(
-        "smart-grid-postgres|30MiB / 4.3GiB|0.10%\ninvalid\n"
-    ) == {
+    assert parse_stats("smart-grid-postgres|30MiB / 4.3GiB|0.10%\ninvalid\n") == {
         "smart-grid-postgres": {
             "memory": "30MiB / 4.3GiB",
             "cpu": "0.10%",

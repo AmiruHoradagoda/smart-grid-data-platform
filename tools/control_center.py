@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from queue import Empty, Queue
 import json
 import sys
 import threading
 import tkinter as tk
-from tkinter import messagebox, scrolledtext, simpledialog, ttk
 import webbrowser
-
+from pathlib import Path
+from queue import Empty, Queue
+from tkinter import messagebox, scrolledtext, simpledialog, ttk
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -24,7 +23,6 @@ from tools.control_center_core import (  # noqa: E402
     KafkaInspector,
     fetch_pipeline_status,
 )
-
 
 REFRESH_MS = 5000
 
@@ -81,7 +79,9 @@ class ControlCenter:
         ttk.Label(header, text="Smart Grid Control Center", style="Title.TLabel").pack(
             side="left"
         )
-        ttk.Button(header, text="Refresh", command=self.refresh_async).pack(side="right")
+        ttk.Button(header, text="Refresh", command=self.refresh_async).pack(
+            side="right"
+        )
         ttk.Label(header, textvariable=self.memory_var).pack(side="right", padx=14)
         ttk.Label(header, textvariable=self.engine_var).pack(side="right", padx=14)
 
@@ -92,18 +92,18 @@ class ControlCenter:
             style="Section.TLabelframe",
         )
         quick.pack(fill="x", pady=(10, 6))
-        ttk.Button(quick, text="Start Infrastructure", command=self.start_infrastructure).pack(
-            side="left", padx=3
-        )
+        ttk.Button(
+            quick, text="Start Infrastructure", command=self.start_infrastructure
+        ).pack(side="left", padx=3)
         ttk.Button(quick, text="Bootstrap DB + Kafka", command=self.bootstrap).pack(
             side="left", padx=3
         )
-        ttk.Button(quick, text="Start Spark + Airflow", command=self.start_compute).pack(
-            side="left", padx=3
-        )
-        ttk.Button(quick, text="Guided Full Start", command=self.guided_full_start).pack(
-            side="left", padx=3
-        )
+        ttk.Button(
+            quick, text="Start Spark + Airflow", command=self.start_compute
+        ).pack(side="left", padx=3)
+        ttk.Button(
+            quick, text="Guided Full Start", command=self.guided_full_start
+        ).pack(side="left", padx=3)
         ttk.Button(quick, text="Stop All (Keep Data)", command=self.stop_all).pack(
             side="right", padx=3
         )
@@ -178,15 +178,15 @@ class ControlCenter:
             state="readonly",
             width=12,
         ).pack(side="left", padx=2)
-        ttk.Button(container_actions, text="Start", command=self.start_selected_container).pack(
-            side="left", padx=2
-        )
-        ttk.Button(container_actions, text="Stop", command=self.stop_selected_container).pack(
-            side="left", padx=2
-        )
-        ttk.Button(container_actions, text="Build Spark", command=self.build_spark).pack(
-            side="left", padx=2
-        )
+        ttk.Button(
+            container_actions, text="Start", command=self.start_selected_container
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            container_actions, text="Stop", command=self.stop_selected_container
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            container_actions, text="Build Spark", command=self.build_spark
+        ).pack(side="left", padx=2)
 
         self.host_tree = ttk.Treeview(
             host_frame,
@@ -209,8 +209,12 @@ class ControlCenter:
             label = self.host.specs[key].label
             button = ttk.Menubutton(host_buttons, text=label)
             menu = tk.Menu(button, tearoff=False)
-            menu.add_command(label="Start", command=lambda value=key: self.start_host(value))
-            menu.add_command(label="Stop", command=lambda value=key: self.stop_host(value))
+            menu.add_command(
+                label="Start", command=lambda value=key: self.start_host(value)
+            )
+            menu.add_command(
+                label="Stop", command=lambda value=key: self.stop_host(value)
+            )
             button["menu"] = menu
             button.grid(row=index // 2, column=index % 2, sticky="ew", padx=2, pady=2)
         host_buttons.columnconfigure(0, weight=1)
@@ -236,9 +240,9 @@ class ControlCenter:
         ttk.Button(airflow, text="Trigger selected", command=self.trigger_dag).pack(
             side="left", padx=2
         )
-        ttk.Button(airflow, text="Show password", command=self.show_airflow_password).pack(
-            side="left", padx=2
-        )
+        ttk.Button(
+            airflow, text="Show password", command=self.show_airflow_password
+        ).pack(side="left", padx=2)
 
         links = ttk.LabelFrame(
             middle, text="Open interfaces", padding=6, style="Section.TLabelframe"
@@ -249,9 +253,9 @@ class ControlCenter:
             ("Swagger", "http://127.0.0.1:8000/docs"),
             ("Dashboard", "http://127.0.0.1:8501"),
         ):
-            ttk.Button(links, text=label, command=lambda value=url: webbrowser.open(value)).pack(
-                side="left", padx=3
-            )
+            ttk.Button(
+                links, text=label, command=lambda value=url: webbrowser.open(value)
+            ).pack(side="left", padx=3)
 
         pipeline = ttk.LabelFrame(
             parent,
@@ -262,7 +266,15 @@ class ControlCenter:
         pipeline.pack(fill="both", expand=True)
         self.pipeline_tree = ttk.Treeview(
             pipeline,
-            columns=("date", "energy", "tariff", "energy_count", "tariff_count", "billing", "error"),
+            columns=(
+                "date",
+                "energy",
+                "tariff",
+                "energy_count",
+                "tariff_count",
+                "billing",
+                "error",
+            ),
             show="headings",
             height=9,
         )
@@ -277,7 +289,9 @@ class ControlCenter:
         )
         for column, label, width in pipeline_columns:
             self.pipeline_tree.heading(column, text=label)
-            self.pipeline_tree.column(column, width=width, anchor="w" if column == "error" else "center")
+            self.pipeline_tree.column(
+                column, width=width, anchor="w" if column == "error" else "center"
+            )
         self.pipeline_tree.pack(fill="both", expand=True)
 
     def _build_kafka_inspector(self, parent: ttk.Frame) -> None:
@@ -365,7 +379,9 @@ class ControlCenter:
             self.kafka_event_tree.heading(column, text=label)
             self.kafka_event_tree.column(column, width=width, anchor="center")
         self.kafka_event_tree.pack(fill="both", expand=True)
-        self.kafka_event_tree.bind("<<TreeviewSelect>>", self._show_selected_kafka_event)
+        self.kafka_event_tree.bind(
+            "<<TreeviewSelect>>", self._show_selected_kafka_event
+        )
 
         ttk.Label(events_frame, text="Selected event JSON:").pack(
             anchor="w", pady=(7, 2)
@@ -386,11 +402,23 @@ class ControlCenter:
         ttk.Combobox(
             controls,
             textvariable=self.log_source_var,
-            values=("postgres", "kafka", "spark", "airflow", "meter", "tariff", "api", "dashboard", "system"),
+            values=(
+                "postgres",
+                "kafka",
+                "spark",
+                "airflow",
+                "meter",
+                "tariff",
+                "api",
+                "dashboard",
+                "system",
+            ),
             state="readonly",
             width=18,
         ).pack(side="left", padx=5)
-        ttk.Button(controls, text="Refresh logs", command=self.refresh_logs).pack(side="left")
+        ttk.Button(controls, text="Refresh logs", command=self.refresh_logs).pack(
+            side="left"
+        )
         ttk.Button(controls, text="Clear view", command=self._clear_log_view).pack(
             side="left", padx=5
         )
@@ -463,7 +491,9 @@ class ControlCenter:
             formatted = raw_value
         self._set_kafka_raw(formatted)
 
-    def _apply_kafka_snapshot(self, partitions: list[object], events: list[object]) -> None:
+    def _apply_kafka_snapshot(
+        self, partitions: list[object], events: list[object]
+    ) -> None:
         for item in self.kafka_partition_tree.get_children():
             self.kafka_partition_tree.delete(item)
         for partition in partitions:
@@ -514,7 +544,9 @@ class ControlCenter:
 
     def _run_action(self, label: str, worker: object) -> None:
         if not self.action_lock.acquire(blocking=False):
-            messagebox.showinfo("Operation in progress", "Wait for the current operation to finish.")
+            messagebox.showinfo(
+                "Operation in progress", "Wait for the current operation to finish."
+            )
             return
 
         self._set_status(f"{label}...")
@@ -545,11 +577,10 @@ class ControlCenter:
                 states = self.docker.container_states()
                 stats = self.docker.resource_stats()
                 pipeline = fetch_pipeline_status()
-                host_states = {
-                    key: self.host.status(key)
-                    for key in self.host.specs
-                }
-                self._post(self._apply_refresh, engine, states, stats, pipeline, host_states)
+                host_states = {key: self.host.status(key) for key in self.host.specs}
+                self._post(
+                    self._apply_refresh, engine, states, stats, pipeline, host_states
+                )
             except Exception as error:
                 self._post(self.engine_var.set, "Docker: unavailable")
                 self._post(self.memory_var.set, "Memory: unavailable")
@@ -574,7 +605,7 @@ class ControlCenter:
         host_states: dict[str, str],
     ) -> None:
         self.engine_var.set(f"Docker {engine['version']} · {engine['cpus']} CPUs")
-        gib = int(engine["memory_bytes"]) / (1024 ** 3)
+        gib = int(engine["memory_bytes"]) / (1024**3)
         self.memory_var.set(f"Docker allocation: {gib:.2f} GiB")
 
         for item in self.container_tree.get_children():
@@ -624,7 +655,9 @@ class ControlCenter:
         def worker() -> str:
             self._post(self._set_status, "Starting PostgreSQL and Kafka...")
             self.docker.compose_up("postgres", "kafka")
-            self._post(self._set_status, "Waiting for PostgreSQL and Kafka health checks...")
+            self._post(
+                self._set_status, "Waiting for PostgreSQL and Kafka health checks..."
+            )
             self.docker.wait_for_health(("postgres", "kafka"))
             return "PostgreSQL and Kafka are healthy."
 
@@ -658,7 +691,9 @@ class ControlCenter:
             self.docker.compose_up("postgres", "kafka")
             self._post(self._set_status, "Step 2/6: waiting for health checks...")
             self.docker.wait_for_health(("postgres", "kafka"))
-            self._post(self._set_status, "Step 3/6: bootstrapping database and topic...")
+            self._post(
+                self._set_status, "Step 3/6: bootstrapping database and topic..."
+            )
             bootstrap_output = self.docker.bootstrap()
             self._post(self._set_status, "Step 4/6: starting Spark and Airflow...")
             self.docker.compose_up("spark", "airflow")
@@ -684,7 +719,9 @@ class ControlCenter:
         def worker() -> str:
             self.host.stop_all()
             self.docker.compose_down(remove_volumes=False)
-            return "Stopped host applications and containers. Data volumes were preserved."
+            return (
+                "Stopped host applications and containers. Data volumes were preserved."
+            )
 
         self._run_action("Stop all", worker)
 
@@ -697,7 +734,9 @@ class ControlCenter:
         )
         if answer != "RESET":
             if answer is not None:
-                messagebox.showinfo("Factory reset", "Reset cancelled; RESET was not entered.")
+                messagebox.showinfo(
+                    "Factory reset", "Reset cancelled; RESET was not entered."
+                )
             return
 
         def worker() -> str:
@@ -709,11 +748,15 @@ class ControlCenter:
 
     def start_selected_container(self) -> None:
         service = self.container_service_var.get()
-        self._run_action(f"Start {service}", lambda: self.docker.compose_up(service).output)
+        self._run_action(
+            f"Start {service}", lambda: self.docker.compose_up(service).output
+        )
 
     def stop_selected_container(self) -> None:
         service = self.container_service_var.get()
-        self._run_action(f"Stop {service}", lambda: self.docker.compose_stop(service).output)
+        self._run_action(
+            f"Stop {service}", lambda: self.docker.compose_stop(service).output
+        )
 
     def build_spark(self) -> None:
         if not messagebox.askyesno(
@@ -726,13 +769,19 @@ class ControlCenter:
     def start_host(self, key: str) -> None:
         self._run_action(
             f"Start {self.host.specs[key].label}",
-            lambda: f"Started PID {self.host.start(key, self._host_log_callback).process.pid}.",
+            lambda: (
+                f"Started PID {self.host.start(key, self._host_log_callback).process.pid}."
+            ),
         )
 
     def stop_host(self, key: str) -> None:
         def worker() -> str:
             stopped = self.host.stop(key)
-            return "Stopped." if stopped else "The control center does not own a running process."
+            return (
+                "Stopped."
+                if stopped
+                else "The control center does not own a running process."
+            )
 
         self._run_action(f"Stop {self.host.specs[key].label}", worker)
 
@@ -744,7 +793,9 @@ class ControlCenter:
 
     def trigger_dag(self) -> None:
         dag_id = self.dag_var.get()
-        self._run_action(f"Trigger {dag_id}", lambda: self.docker.trigger_dag(dag_id).output)
+        self._run_action(
+            f"Trigger {dag_id}", lambda: self.docker.trigger_dag(dag_id).output
+        )
 
     def show_airflow_password(self) -> None:
         def worker() -> str:
@@ -758,7 +809,9 @@ class ControlCenter:
                 ]
             )
             if not result.ok:
-                raise CommandError(result.output or "Airflow password file is unavailable.")
+                raise CommandError(
+                    result.output or "Airflow password file is unavailable."
+                )
             return result.stdout
 
         self.log_source_var.set("system")

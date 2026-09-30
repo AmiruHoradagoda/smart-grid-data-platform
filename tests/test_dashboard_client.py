@@ -12,11 +12,16 @@ def test_missing_billing_is_empty(monkeypatch):
     get = Mock(return_value=response)
     monkeypatch.setattr(api_client.requests, "get", get)
     assert api_client.get_daily_billing(date(2099, 1, 1)) == []
-    assert get.call_args.kwargs == {"params": {"billing_date": "2099-01-01"}, "timeout": 5}
+    assert get.call_args.kwargs == {
+        "params": {"billing_date": "2099-01-01"},
+        "timeout": 5,
+    }
 
 
 def test_connection_failure_has_short_message(monkeypatch):
-    monkeypatch.setattr(api_client.requests, "get", Mock(side_effect=requests.ConnectionError()))
+    monkeypatch.setattr(
+        api_client.requests, "get", Mock(side_effect=requests.ConnectionError())
+    )
     with pytest.raises(api_client.APIError, match="unavailable"):
         api_client.get_health()
 
@@ -46,5 +51,6 @@ def test_history_accepts_selected_date(monkeypatch):
     monkeypatch.setattr(api_client.requests, "get", get)
     assert api_client.get_zone_history(1000, date(2026, 1, 1)) == []
     assert get.call_args.kwargs["params"] == {
-        "limit": 1000, "window_date": "2026-01-01",
+        "limit": 1000,
+        "window_date": "2026-01-01",
     }

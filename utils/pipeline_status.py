@@ -2,7 +2,6 @@
 
 from datetime import date
 
-
 BILLING_PENDING = "PENDING"
 BILLING_PROCESSING = "PROCESSING"
 BILLING_COMPLETED = "COMPLETED"
@@ -231,10 +230,7 @@ def calculate_bills_for_date(cursor, energy_date, expected_households):
         (energy_date, energy_date),
     )
 
-    energy_count, tariff_count = (
-        int(value)
-        for value in cursor.fetchone()
-    )
+    energy_count, tariff_count = (int(value) for value in cursor.fetchone())
 
     if not is_complete_household_set(energy_count, expected_households):
         raise ValueError(

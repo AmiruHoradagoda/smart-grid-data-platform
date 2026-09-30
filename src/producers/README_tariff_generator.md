@@ -102,7 +102,7 @@ If they do not match, the application raises an error.
 
 This prevents incorrect configuration where some households would not receive a tariff profile.
 
-## Reproducible assignment
+## Reproducible tier allocation
 
 `tariff.random_seed: 42` seeds a local random generator. The same household IDs
 receive the same tariff tiers across restarts. This is separate from the solar
@@ -172,7 +172,7 @@ tariffs_2026-01-02.csv
 
 ### Why?
 
-Waiting for real days would make the project impossible to demonstrate in a short university demo.
+Waiting for real days would make the complete workflow impractical to observe in a short local run.
 
 ## Effective Date
 

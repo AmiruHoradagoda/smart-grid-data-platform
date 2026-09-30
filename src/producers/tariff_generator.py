@@ -1,36 +1,22 @@
 import csv
 import random
 import time
-
 from datetime import date, timedelta
 from pathlib import Path
 
 from utils.config_loader import Config
 
+NUMBER_OF_HOUSEHOLDS = Config.get("smart_meter.number_of_households")
 
-NUMBER_OF_HOUSEHOLDS = Config.get(
-    "smart_meter.number_of_households"
-)
+RANDOM_SEED = Config.get("tariff.random_seed")
 
-RANDOM_SEED = Config.get(
-    "tariff.random_seed"
-)
+SIMULATED_DAY_SECONDS = Config.get("simulation.simulated_day_seconds")
 
-SIMULATED_DAY_SECONDS = Config.get(
-    "simulation.simulated_day_seconds"
-)
+START_DATE = date.fromisoformat(Config.get("simulation.start_date"))
 
-START_DATE = date.fromisoformat(
-    Config.get("simulation.start_date")
-)
+OUTPUT_DIRECTORY = Path(Config.get("tariff.output_directory"))
 
-OUTPUT_DIRECTORY = Path(
-    Config.get("tariff.output_directory")
-)
-
-TARIFF_TIERS = Config.get(
-    "tariff.tiers"
-)
+TARIFF_TIERS = Config.get("tariff.tiers")
 
 
 def build_tariff_profiles():
@@ -42,30 +28,22 @@ def build_tariff_profiles():
 
     tiers = []
 
-    # Build the tier list using config.yaml
+    # Expand the configured tier counts before assigning them to households.
     for tier_config in TARIFF_TIERS.values():
-
         tier_name = tier_config["name"]
         household_count = tier_config["household_count"]
 
-        tiers.extend(
-            [tier_name] * household_count
-        )
+        tiers.extend([tier_name] * household_count)
 
-    # Make sure every household receives exactly one tariff profile.
+    # A mismatched count would leave a household missing or create extra rows.
     if len(tiers) != NUMBER_OF_HOUSEHOLDS:
-        raise ValueError(
-            "Total tariff household count must equal "
-            "NUMBER_OF_HOUSEHOLDS"
-        )
+        raise ValueError("Total tariff household count must equal NUMBER_OF_HOUSEHOLDS")
 
-    # Random distribution, but reproducible because of RANDOM_SEED.
+    # The fixed seed keeps the household-to-tier mapping stable across runs.
     rng.shuffle(tiers)
 
-    # Easy lookup using the configured tier name.
     tier_lookup = {
-        tier_config["name"]: tier_config
-        for tier_config in TARIFF_TIERS.values()
+        tier_config["name"]: tier_config for tier_config in TARIFF_TIERS.values()
     }
 
     profiles = []
@@ -74,7 +52,6 @@ def build_tariff_profiles():
         tiers,
         start=1,
     ):
-
         household_id = f"HH-{index:03d}"
 
         tier_config = tier_lookup[tier_name]
@@ -82,14 +59,9 @@ def build_tariff_profiles():
         profiles.append(
             {
                 "household_id": household_id,
-
                 "billing_tier": tier_name,
-
-                "tariff_rate":
-                    tier_config["rate_lkr_per_kwh"],
-
-                "subsidy_flag":
-                    tier_config["subsidy"],
+                "tariff_rate": tier_config["rate_lkr_per_kwh"],
+                "subsidy_flag": tier_config["subsidy"],
             }
         )
 
@@ -109,16 +81,13 @@ def generate_tariff_file(
         exist_ok=True,
     )
 
-    file_path = OUTPUT_DIRECTORY / (
-        f"tariffs_{effective_date.isoformat()}.csv"
-    )
+    file_path = OUTPUT_DIRECTORY / (f"tariffs_{effective_date.isoformat()}.csv")
 
     with file_path.open(
         "w",
         newline="",
         encoding="utf-8",
     ) as file:
-
         writer = csv.DictWriter(
             file,
             fieldnames=[
@@ -133,12 +102,10 @@ def generate_tariff_file(
         writer.writeheader()
 
         for profile in profiles:
-
             writer.writerow(
                 {
                     **profile,
-                    "effective_date":
-                        effective_date.isoformat(),
+                    "effective_date": effective_date.isoformat(),
                 }
             )
 
@@ -154,37 +121,24 @@ def main():
     print("Daily Tariff Generator Started")
     print("--------------------------------")
     print(f"Households: {len(profiles)}")
-    print(
-        f"Simulated day duration: "
-        f"{SIMULATED_DAY_SECONDS} real seconds"
-    )
+    print(f"Simulated day duration: {SIMULATED_DAY_SECONDS} real seconds")
     print("--------------------------------")
 
     try:
-
         while True:
-
             file_path = generate_tariff_file(
                 profiles,
                 simulated_date,
             )
 
-            print(
-                f"[{simulated_date}] "
-                f"Generated {file_path}"
-            )
+            print(f"[{simulated_date}] Generated {file_path}")
 
             simulated_date += timedelta(days=1)
 
-            time.sleep(
-                SIMULATED_DAY_SECONDS
-            )
+            time.sleep(SIMULATED_DAY_SECONDS)
 
     except KeyboardInterrupt:
-
-        print(
-            "\nStopping tariff generator..."
-        )
+        print("\nStopping tariff generator...")
 
 
 if __name__ == "__main__":

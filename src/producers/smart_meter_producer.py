@@ -3,47 +3,30 @@ import math
 import random
 import time
 import uuid
-
 from datetime import datetime, timedelta, timezone
+
 from confluent_kafka import Producer
+
 from utils.config_loader import Config
 
+KAFKA_TOPIC = Config.get("kafka.topic")
 
-KAFKA_TOPIC = Config.get(
-    "kafka.topic"
-)
+KAFKA_BOOTSTRAP_SERVERS = Config.get("kafka.bootstrap_servers.host")
 
-KAFKA_BOOTSTRAP_SERVERS = Config.get(
-    "kafka.bootstrap_servers.host"
-)
+NUMBER_OF_HOUSEHOLDS = Config.get("smart_meter.number_of_households")
 
-NUMBER_OF_HOUSEHOLDS = Config.get(
-    "smart_meter.number_of_households"
-)
+NUMBER_OF_SOLAR_HOUSES = Config.get("smart_meter.number_of_solar_houses")
 
-NUMBER_OF_SOLAR_HOUSES = Config.get(
-    "smart_meter.number_of_solar_houses"
-)
+RANDOM_SEED = Config.get("smart_meter.random_seed")
 
-RANDOM_SEED = Config.get(
-    "smart_meter.random_seed"
-)
+EVENT_INTERVAL_SECONDS = Config.get("smart_meter.event_interval_seconds")
 
-EVENT_INTERVAL_SECONDS = Config.get(
-    "smart_meter.event_interval_seconds"
-)
-
-GRID_ZONES = Config.get(
-    "smart_meter.grid_zones"
-)
+GRID_ZONES = Config.get("smart_meter.grid_zones")
 
 rng = random.Random(RANDOM_SEED)
 
 SOLAR_HOUSEHOLDS = set(
-    rng.sample(
-        range(1, NUMBER_OF_HOUSEHOLDS + 1),
-        NUMBER_OF_SOLAR_HOUSES
-    )
+    rng.sample(range(1, NUMBER_OF_HOUSEHOLDS + 1), NUMBER_OF_SOLAR_HOUSES)
 )
 
 SIMULATION_SPEED = Config.get("simulation.simulation_speed")
@@ -58,15 +41,11 @@ def get_simulated_time():
     Convert real elapsed time into accelerated simulated time.
     """
 
-    real_elapsed = (
-        datetime.now(timezone.utc) - REAL_START_TIME
-    ).total_seconds()
+    real_elapsed = (datetime.now(timezone.utc) - REAL_START_TIME).total_seconds()
 
     simulated_elapsed = real_elapsed * SIMULATION_SPEED
 
-    return SIMULATION_START_TIME + timedelta(
-        seconds=simulated_elapsed
-    )
+    return SIMULATION_START_TIME + timedelta(seconds=simulated_elapsed)
 
 
 def calculate_consumption(hour, base_load):
@@ -108,13 +87,10 @@ def calculate_consumption(hour, base_load):
         Config.get("smart_meter.consumption.random_variation.max"),
     )
 
-    consumption = (
-        base_load
-        * multiplier
-        * random_variation
-    )
+    consumption = base_load * multiplier * random_variation
 
     return round(consumption, 3)
+
 
 def calculate_solar_generation(hour, solar_capacity):
     """
@@ -141,20 +117,14 @@ def calculate_solar_generation(hour, solar_capacity):
     else:
         daylight_progress = 0.5 + 0.5 * (hour - peak) / (sunset - peak)
 
-    solar_factor = math.sin(
-        math.pi * daylight_progress
-    )
+    solar_factor = math.sin(math.pi * daylight_progress)
 
     weather_variation = random.uniform(
         Config.get("smart_meter.solar_generation.weather_variation.min"),
         Config.get("smart_meter.solar_generation.weather_variation.max"),
     )
 
-    generation = (
-        solar_capacity
-        * solar_factor
-        * weather_variation
-    )
+    generation = solar_capacity * solar_factor * weather_variation
 
     return round(max(generation, 0), 3)
 
@@ -167,7 +137,6 @@ def build_households():
     households = []
 
     for index in range(1, NUMBER_OF_HOUSEHOLDS + 1):
-
         household_id = f"HH-{index:03d}"
         meter_id = f"METER-{index:03d}"
 
@@ -208,10 +177,7 @@ def create_meter_event(household):
     simulated_time = get_simulated_time()
 
     # Include minutes for smoother solar variation.
-    decimal_hour = (
-        simulated_time.hour
-        + simulated_time.minute / 60
-    )
+    decimal_hour = simulated_time.hour + simulated_time.minute / 60
 
     consumption = calculate_consumption(
         decimal_hour,
@@ -226,24 +192,18 @@ def create_meter_event(household):
     return {
         "event_id": str(uuid.uuid4()),
         "schema_version": 1,
-
         "meter_id": household["meter_id"],
         "household_id": household["household_id"],
-
         "power_consumption_kwh": consumption,
         "solar_generation_kwh": solar_generation,
-
         "grid_zone": household["grid_zone"],
-
         "timestamp": simulated_time.isoformat(),
     }
 
 
 def delivery_callback(error, message):
     if error:
-        print(
-            f"Delivery failed: {error}"
-        )
+        print(f"Delivery failed: {error}")
 
 
 def main():
@@ -260,32 +220,18 @@ def main():
     print("--------------------------------")
     print(f"Households: {len(households)}")
     print(f"Kafka Topic: {KAFKA_TOPIC}")
-    print(
-        f"Simulation speed: {SIMULATION_SPEED} simulated seconds per real second"
-    )
+    print(f"Simulation speed: {SIMULATION_SPEED} simulated seconds per real second")
     print("--------------------------------")
 
     try:
-
         while True:
-
             for household in households:
-
-                event = create_meter_event(
-                    household
-                )
+                event = create_meter_event(household)
 
                 producer.produce(
                     topic=KAFKA_TOPIC,
-
-                    key=event[
-                        "household_id"
-                    ],
-
-                    value=json.dumps(
-                        event
-                    ),
-
+                    key=event["household_id"],
+                    value=json.dumps(event),
                     callback=delivery_callback,
                 )
 
@@ -295,26 +241,18 @@ def main():
             simulated_time = get_simulated_time()
 
             print(
-                f"[{simulated_time.isoformat()}] "
-                f"Published "
-                f"{len(households)} readings"
+                f"[{simulated_time.isoformat()}] Published {len(households)} readings"
             )
 
-            time.sleep(
-                EVENT_INTERVAL_SECONDS
-            )
+            time.sleep(EVENT_INTERVAL_SECONDS)
 
     except KeyboardInterrupt:
-
         print("\nStopping simulator...")
 
     finally:
-
         producer.flush()
 
-        print(
-            "All pending Kafka messages flushed."
-        )
+        print("All pending Kafka messages flushed.")
 
 
 if __name__ == "__main__":

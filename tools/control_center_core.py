@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from collections import deque
-from dataclasses import dataclass
-from pathlib import Path
 import json
 import os
 import signal
@@ -13,9 +10,11 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Callable, Iterable
 import uuid
-
+from collections import deque
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Iterable
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,9 +42,7 @@ class CommandResult:
     @property
     def output(self) -> str:
         return "\n".join(
-            value.strip()
-            for value in (self.stdout, self.stderr)
-            if value.strip()
+            value.strip() for value in (self.stdout, self.stderr) if value.strip()
         )
 
 
@@ -239,7 +236,9 @@ class KafkaInspector:
                     raise CommandError(f"Kafka event read failed: {message.error()}")
 
                 partition = message.partition()
-                if received.get(partition, 0) >= expected_by_partition.get(partition, 0):
+                if received.get(partition, 0) >= expected_by_partition.get(
+                    partition, 0
+                ):
                     continue
 
                 samples.append(
@@ -443,10 +442,9 @@ class HostProcessManager:
 
             creationflags = 0
             if os.name == "nt":
-                creationflags = (
-                    getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-                    | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-                )
+                creationflags = getattr(
+                    subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+                ) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
             environment = os.environ.copy()
             environment["PYTHONUNBUFFERED"] = "1"
@@ -617,7 +615,9 @@ class DockerManager:
 
     def container_states(self) -> dict[str, dict[str, str]]:
         states: dict[str, dict[str, str]] = {}
-        template = "{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}"
+        template = (
+            "{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}"
+        )
 
         for service, container in CONTAINERS.items():
             result = self.runner.run(
@@ -707,7 +707,9 @@ class DockerManager:
         else:
             messages.append("airflow_meta database already exists.")
 
-        migration = PROJECT_ROOT / "database" / "migrations" / "001_daily_pipeline_status.sql"
+        migration = (
+            PROJECT_ROOT / "database" / "migrations" / "001_daily_pipeline_status.sql"
+        )
         if migration.exists():
             require_success(
                 self.runner.run(

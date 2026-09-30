@@ -1,10 +1,10 @@
-from datetime import date
-from contextlib import closing
 import logging
+from contextlib import closing
+from datetime import date
 
 import psycopg2
-from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, HTTPException, Query
+from psycopg2.extras import RealDictCursor
 
 from utils.config_loader import Config
 
@@ -80,7 +80,9 @@ def get_latest_zone_metrics():
 
 
 @app.get("/api/v1/zones/history")
-def get_zone_history(limit: int = Query(default=100, ge=1, le=1000), window_date: date | None = None):
+def get_zone_history(
+    limit: int = Query(default=100, ge=1, le=1000), window_date: date | None = None
+):
     with closing(get_connection()) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -112,25 +114,34 @@ def get_renewable_alerts():
     zones = get_latest_zone_metrics()
     alerts = []
     for zone in zones:
-        if (start_hour <= zone["window_end"].hour < end_hour
-                and zone["renewable_contribution_pct"] < threshold):
-            alerts.append({
-                "grid_zone": zone["grid_zone"],
-                "renewable_contribution_pct": zone["renewable_contribution_pct"],
-                "status": "LOW_RENEWABLE",
-                "window_end": zone["window_end"],
-            })
+        if (
+            start_hour <= zone["window_end"].hour < end_hour
+            and zone["renewable_contribution_pct"] < threshold
+        ):
+            alerts.append(
+                {
+                    "grid_zone": zone["grid_zone"],
+                    "renewable_contribution_pct": zone["renewable_contribution_pct"],
+                    "status": "LOW_RENEWABLE",
+                    "window_end": zone["window_end"],
+                }
+            )
             logger.warning(
                 "low renewable contribution grid_zone=%s renewable_pct=%s threshold_pct=%s",
-                zone["grid_zone"], zone["renewable_contribution_pct"], threshold,
+                zone["grid_zone"],
+                zone["renewable_contribution_pct"],
+                threshold,
             )
-    logger.info("renewable alert check completed zones_checked=%s alerts_found=%s",
-                len(zones), len(alerts))
+    logger.info(
+        "renewable alert check completed zones_checked=%s alerts_found=%s",
+        len(zones),
+        len(alerts),
+    )
     return {
-    "threshold_pct": threshold,
-    "active_start_hour": start_hour,
-    "active_end_hour": end_hour,
-    "alerts": alerts,
+        "threshold_pct": threshold,
+        "active_start_hour": start_hour,
+        "active_end_hour": end_hour,
+        "alerts": alerts,
     }
 
 

@@ -1,18 +1,17 @@
 import logging
-
 from datetime import date, datetime, timedelta
 
 import psycopg2
-
 from airflow.sdk import dag, task
 
 from utils.config_loader import Config
 from utils.pipeline_status import (
     calculate_bills_for_date,
-    find_ready_dates as select_ready_dates,
     mark_billing_failed,
 )
-
+from utils.pipeline_status import (
+    find_ready_dates as select_ready_dates,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +66,7 @@ def daily_billing():
             return 0
 
         connection = get_postgres_connection()
-        expected_households = Config.get(
-            "smart_meter.number_of_households"
-        )
+        expected_households = Config.get("smart_meter.number_of_households")
         failures = []
         total_billed = 0
 
@@ -89,8 +86,7 @@ def daily_billing():
                     total_billed += billed_households
 
                     logger.info(
-                        "billing_completed "
-                        "energy_date=%s households=%s",
+                        "billing_completed energy_date=%s households=%s",
                         energy_date,
                         billed_households,
                     )
@@ -117,10 +113,7 @@ def daily_billing():
             connection.close()
 
         if failures:
-            raise RuntimeError(
-                "Billing failed for ready dates: "
-                + "; ".join(failures)
-            )
+            raise RuntimeError("Billing failed for ready dates: " + "; ".join(failures))
 
         return total_billed
 

@@ -122,12 +122,10 @@ def test_calculate_bills_marks_a_complete_date():
 
     assert billed == 20
     assert any(
-        "billing_status = 'PROCESSING'" in query
-        for query, _ in cursor.executions
+        "billing_status = 'PROCESSING'" in query for query, _ in cursor.executions
     )
     assert any(
-        "billing_status = 'COMPLETED'" in query
-        for query, _ in cursor.executions
+        "billing_status = 'COMPLETED'" in query for query, _ in cursor.executions
     )
 
 

@@ -1,11 +1,9 @@
 import csv
 import logging
-
 from datetime import date, datetime
 from pathlib import Path
 
 import psycopg2
-
 from airflow.sdk import dag, task
 
 from utils.config_loader import Config
@@ -14,10 +12,7 @@ from utils.pipeline_status import update_tariff_readiness
 logger = logging.getLogger(__name__)
 
 
-TARIFF_DIRECTORY = (
-    Path("/opt/airflow")
-    / Config.get("tariff.output_directory")
-)
+TARIFF_DIRECTORY = Path("/opt/airflow") / Config.get("tariff.output_directory")
 
 EXPECTED_COLUMNS = {
     "household_id",
@@ -30,21 +25,11 @@ EXPECTED_COLUMNS = {
 
 def get_postgres_connection():
     return psycopg2.connect(
-        host=Config.get(
-            "postgres.docker.hostname"
-        ),
-        port=Config.get(
-            "postgres.docker.port"
-        ),
-        dbname=Config.get(
-            "postgres.database"
-        ),
-        user=Config.get(
-            "postgres.user"
-        ),
-        password=Config.get(
-            "postgres.password"
-        ),
+        host=Config.get("postgres.docker.hostname"),
+        port=Config.get("postgres.docker.port"),
+        dbname=Config.get("postgres.database"),
+        user=Config.get("postgres.user"),
+        password=Config.get("postgres.password"),
     )
 
 
@@ -62,21 +47,12 @@ def tariff_ingestion():
         Find all available daily tariff CSV files.
         """
 
-        files = sorted(
-            TARIFF_DIRECTORY.glob(
-                "tariffs_*.csv"
-            )
-        )
+        files = sorted(TARIFF_DIRECTORY.glob("tariffs_*.csv"))
 
         if not files:
-            raise FileNotFoundError(
-                "No tariff CSV files found."
-            )
+            raise FileNotFoundError("No tariff CSV files found.")
 
-        return [
-            str(file_path)
-            for file_path in files
-        ]
+        return [str(file_path) for file_path in files]
 
     @task
     def validate_tariff_files(file_paths):
@@ -84,27 +60,21 @@ def tariff_ingestion():
         Validate every tariff CSV before loading.
         """
 
-        expected_households = Config.get(
-            "smart_meter.number_of_households"
-        )
+        expected_households = Config.get("smart_meter.number_of_households")
 
         valid_files = []
 
         for file_path in file_paths:
-
             path = Path(file_path)
 
             with path.open(
                 "r",
                 encoding="utf-8",
             ) as file:
-
                 reader = csv.DictReader(file)
 
                 if set(reader.fieldnames) != EXPECTED_COLUMNS:
-                    raise ValueError(
-                        f"Invalid columns in {path.name}"
-                    )
+                    raise ValueError(f"Invalid columns in {path.name}")
 
                 rows = list(reader)
 
@@ -118,32 +88,19 @@ def tariff_ingestion():
             household_ids = set()
 
             for row in rows:
-
                 household_id = row["household_id"]
 
                 if household_id in household_ids:
-                    raise ValueError(
-                        f"{path.name}: duplicate household "
-                        f"{household_id}"
-                    )
+                    raise ValueError(f"{path.name}: duplicate household {household_id}")
 
-                household_ids.add(
-                    household_id
-                )
+                household_ids.add(household_id)
 
-                tariff_rate = float(
-                    row["tariff_rate"]
-                )
+                tariff_rate = float(row["tariff_rate"])
 
                 if tariff_rate < 0:
-                    raise ValueError(
-                        f"{path.name}: tariff rate "
-                        "cannot be negative"
-                    )
+                    raise ValueError(f"{path.name}: tariff rate cannot be negative")
 
-            valid_files.append(
-                str(path)
-            )
+            valid_files.append(str(path))
 
         return valid_files
 
@@ -156,30 +113,21 @@ def tariff_ingestion():
         connection = get_postgres_connection()
 
         try:
-
             effective_dates = set()
 
             with connection.cursor() as cursor:
-
                 for file_path in file_paths:
-
                     with open(
                         file_path,
                         "r",
                         encoding="utf-8",
                     ) as file:
-
                         reader = csv.DictReader(file)
 
                         for row in reader:
+                            effective_date = date.fromisoformat(row["effective_date"])
 
-                            effective_date = date.fromisoformat(
-                                row["effective_date"]
-                            )
-
-                            effective_dates.add(
-                                effective_date
-                            )
+                            effective_dates.add(effective_date)
 
                             cursor.execute(
                                 """
@@ -216,25 +164,15 @@ def tariff_ingestion():
                                 (
                                     row["household_id"],
                                     effective_date,
-
-                                    float(
-                                        row["tariff_rate"]
-                                    ),
-
+                                    float(row["tariff_rate"]),
                                     row["billing_tier"],
-
-                                    row[
-                                        "subsidy_flag"
-                                    ].lower()
-                                    == "true",
+                                    row["subsidy_flag"].lower() == "true",
                                 ),
                             )
 
                     logger.info("Loaded tariff file: %s", Path(file_path).name)
 
-                expected_households = Config.get(
-                    "smart_meter.number_of_households"
-                )
+                expected_households = Config.get("smart_meter.number_of_households")
 
                 for effective_date in sorted(effective_dates):
                     households, is_ready = update_tariff_readiness(
@@ -269,13 +207,9 @@ def tariff_ingestion():
 
     tariff_files = find_tariff_files()
 
-    valid_files = validate_tariff_files(
-        tariff_files
-    )
+    valid_files = validate_tariff_files(tariff_files)
 
-    load_tariff_files(
-        valid_files
-    )
+    load_tariff_files(valid_files)
 
 
 tariff_ingestion()

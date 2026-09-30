@@ -1,4 +1,4 @@
-# Demo checklist (5–10 minutes)
+# Operations walkthrough (5-10 minutes)
 
 Prepare dependencies with `uv sync` and run `uv run pytest` before presenting.
 Use existing data for a reliable, read-only demo. Have FastAPI running with

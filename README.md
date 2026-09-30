@@ -1,7 +1,7 @@
 # Smart Grid Energy Monitoring & Billing Platform
 
-A university data engineering mini-project that simulates household electricity
-consumption and rooftop solar generation. It combines streaming grid monitoring
+A data engineering platform that simulates household electricity consumption
+and rooftop solar generation. It combines streaming grid monitoring
 with daily tariff reconciliation and estimated household billing, served through
 a small HTTP API. All household profiles and tariff rates are simulated;
 they are **not official Sri Lankan electricity tariff rates**.
@@ -133,7 +133,7 @@ decide which simulated date is eligible. `daily_pipeline_status` is the durable
 source of truth, with `PENDING`, `PROCESSING`, `COMPLETED`, and `FAILED` states.
 If Airflow is stopped, ready dates remain pending in PostgreSQL and are processed
 after Airflow returns. Upserts make reruns idempotent. Airflow uses `standalone`
-for this local demo, with PostgreSQL metadata rather than SQLite.
+for the local runtime, with PostgreSQL metadata rather than SQLite.
 
 Inspect the handoff at any time:
 
@@ -205,8 +205,8 @@ A fresh database volume receives the same table automatically from
 ```powershell
 docker compose up -d --build
 docker exec smart-grid-airflow airflow dags list
-docker exec smart-grid-airflow airflow dags unpause tariff_ingestion
-docker exec smart-grid-airflow airflow dags unpause daily_billing
+docker exec smart-grid-airflow airflow dags unpause -y tariff_ingestion
+docker exec smart-grid-airflow airflow dags unpause -y daily_billing
 ```
 
 Allow initial Spark connector downloads and Airflow DAG discovery to complete
@@ -223,12 +223,14 @@ one day to finalize daily summaries. Airflow then loads tariffs and calculates
 bills. Press Ctrl+C to stop each host process.
 
 **Existing data:** both producers restart from January 1. The tariff generator
-overwrites files with matching dates and may replace historical profiles generated before the fixed seed was added. For an existing
-submission/demo dataset, use the read-only [demo checklist](docs/demo-checklist.md)
-instead of restarting generators. Do not delete volumes or checkpoints to retry.
+overwrites files with matching dates and may replace historical profiles
+generated before the fixed seed was added. To preserve an existing dataset, use
+the read-only [operations walkthrough](docs/demo-checklist.md) instead of
+restarting generators. Do not delete volumes or checkpoints to retry.
 
 Host PostgreSQL is `127.0.0.1:5433` (avoids native Windows PostgreSQL on 5432);
-containers use `postgres:5432`. **Local demo credentials** are `smartgrid` / `smartgrid`.
+containers use `postgres:5432`. **Local development credentials** are
+`smartgrid` / `smartgrid`.
 The config loader caches YAML per process: restart host processes after changing it.
 
 Useful URLs:
@@ -237,8 +239,9 @@ Useful URLs:
 - Health: http://127.0.0.1:8000/health
 - Airflow UI: http://localhost:8080
 
-Airflow standalone stores generated login passwords inside its volume. To view
-them locally (do not include them in screenshots or submissions):
+Airflow standalone stores generated login passwords inside its volume. View
+them only when local access is required, and do not copy them into recordings,
+issues, or shared logs:
 
 ```powershell
 docker exec smart-grid-airflow cat /opt/airflow/simple_auth_manager_passwords.json.generated
@@ -299,6 +302,8 @@ backend; the dashboard only aggregates returned data for presentation.
 
 ```powershell
 uv run pytest
+uv run ruff check .
+uv run ruff format --check .
 ```
 
 Tests use mocked API database connections and temporary CSV files; no Docker,
@@ -324,4 +329,4 @@ SELECT energy_date, energy_ready, tariff_ready, energy_households, tariff_househ
 FROM daily_pipeline_status ORDER BY energy_date;
 ```
 
-Use `\q` to exit. See the [5–10 minute demo checklist](docs/demo-checklist.md).
+Use `\q` to exit. See the [5-10 minute operations walkthrough](docs/demo-checklist.md).

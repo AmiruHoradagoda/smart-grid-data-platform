@@ -1,8 +1,8 @@
 import logging
 
 import psycopg2
-
 from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 from pyspark.sql.functions import (
     col,
     count,
@@ -16,16 +16,15 @@ from pyspark.sql.functions import (
     window,
 )
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    IntegerType,
     DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
 )
-from pyspark.sql import functions as F
+
 from utils.config_loader import Config
 from utils.pipeline_status import write_daily_energy_rows
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -51,53 +50,37 @@ def get_postgres_connection():
     )
 
 
-KAFKA_BOOTSTRAP_SERVERS = Config.get(
-    "kafka.bootstrap_servers.docker"
-)
-KAFKA_TOPIC = Config.get(
-    "kafka.topic"
-)
-WINDOW_DURATION = Config.get(
-    "spark.window_duration"
-)
+KAFKA_BOOTSTRAP_SERVERS = Config.get("kafka.bootstrap_servers.docker")
+KAFKA_TOPIC = Config.get("kafka.topic")
+WINDOW_DURATION = Config.get("spark.window_duration")
 
-WATERMARK_DURATION = Config.get(
-    "spark.watermark_duration"
+WATERMARK_DURATION = Config.get("spark.watermark_duration")
+HOUSEHOLD_CHECKPOINT_LOCATION = Config.get("spark.household_checkpoint_location")
+ZONE_CHECKPOINT_LOCATION = Config.get("spark.zone_checkpoint_location")
+
+SMART_METER_SCHEMA = StructType(
+    [
+        StructField("event_id", StringType(), False),
+        StructField("schema_version", IntegerType(), False),
+        StructField("meter_id", StringType(), False),
+        StructField("household_id", StringType(), False),
+        StructField("power_consumption_kwh", DoubleType(), False),
+        StructField("solar_generation_kwh", DoubleType(), False),
+        StructField("grid_zone", StringType(), False),
+        StructField("timestamp", StringType(), False),
+    ]
 )
-HOUSEHOLD_CHECKPOINT_LOCATION = Config.get(
-    "spark.household_checkpoint_location"
-)
-ZONE_CHECKPOINT_LOCATION = Config.get(
-    "spark.zone_checkpoint_location"
-)
-
-SMART_METER_SCHEMA = StructType([
-    StructField("event_id", StringType(), False),
-    StructField("schema_version", IntegerType(), False),
-
-    StructField("meter_id", StringType(), False),
-    StructField("household_id", StringType(), False),
-
-    StructField("power_consumption_kwh", DoubleType(), False),
-    StructField("solar_generation_kwh", DoubleType(), False),
-
-    StructField("grid_zone", StringType(), False),
-    StructField("timestamp", StringType(), False),
-])
 
 
 def create_spark_session():
-    return (
-        SparkSession.builder
-        .appName(Config.get("spark.application_name"))
-        .getOrCreate()
-    )
+    return SparkSession.builder.appName(
+        Config.get("spark.application_name")
+    ).getOrCreate()
 
 
 def read_kafka_stream(spark):
     return (
-        spark.readStream
-        .format("kafka")
+        spark.readStream.format("kafka")
         .option(
             "kafka.bootstrap.servers",
             KAFKA_BOOTSTRAP_SERVERS,
@@ -116,8 +99,7 @@ def read_kafka_stream(spark):
 
 def parse_meter_events(kafka_df):
     return (
-        kafka_df
-        .select(
+        kafka_df.select(
             col("key").cast("string").alias("kafka_key"),
             col("value").cast("string").alias("json_value"),
             col("partition"),
@@ -137,18 +119,17 @@ def parse_meter_events(kafka_df):
             "data.*",
         )
     )
+
+
 def prepare_meter_events(events_df):
     """
     Convert timestamps, validate readings,
     and calculate grid electricity import.
     """
 
-    prepared_df = (
-        events_df
-        .withColumn(
-            "event_timestamp",
-            to_timestamp(col("timestamp")),
-        )
+    prepared_df = events_df.withColumn(
+        "event_timestamp",
+        to_timestamp(col("timestamp")),
     )
 
     valid_df = prepared_df.filter(
@@ -164,8 +145,7 @@ def prepare_meter_events(events_df):
     return valid_df.withColumn(
         "grid_import_kwh",
         greatest(
-            col("power_consumption_kwh")
-            - col("solar_generation_kwh"),
+            col("power_consumption_kwh") - col("solar_generation_kwh"),
             lit(0.0),
         ),
     )
@@ -178,8 +158,7 @@ def calculate_zone_metrics(events_df):
     """
 
     return (
-        events_df
-        .withWatermark(
+        events_df.withWatermark(
             "event_timestamp",
             WATERMARK_DURATION,
         )
@@ -195,42 +174,30 @@ def calculate_zone_metrics(events_df):
                 sum("power_consumption_kwh"),
                 3,
             ).alias("total_consumption_kwh"),
-
             round(
                 sum("solar_generation_kwh"),
                 3,
             ).alias("total_solar_generation_kwh"),
-
             round(
                 sum("grid_import_kwh"),
                 3,
             ).alias("total_grid_import_kwh"),
-
-            count("household_id").alias(
-                "meter_readings"
-            ),
+            count("household_id").alias("meter_readings"),
         )
         .withColumn(
             "renewable_contribution_pct",
             when(
                 col("total_consumption_kwh") > 0,
                 round(
-                    (
-                        col("total_solar_generation_kwh")
-                        / col("total_consumption_kwh")
-                    )
+                    (col("total_solar_generation_kwh") / col("total_consumption_kwh"))
                     * 100,
                     2,
                 ),
             ).otherwise(0.0),
         )
         .select(
-            col("window.start").alias(
-                "window_start"
-            ),
-            col("window.end").alias(
-                "window_end"
-            ),
+            col("window.start").alias("window_start"),
+            col("window.end").alias("window_end"),
             "grid_zone",
             "total_consumption_kwh",
             "total_solar_generation_kwh",
@@ -239,6 +206,8 @@ def calculate_zone_metrics(events_df):
             "meter_readings",
         )
     )
+
+
 def write_zone_metrics_to_postgres(batch_df, batch_id):
     """
     Write finalized zone metrics from one Spark micro-batch
@@ -249,8 +218,7 @@ def write_zone_metrics_to_postgres(batch_df, batch_id):
         return
 
     (
-        batch_df.write
-        .jdbc(
+        batch_df.write.jdbc(
             url=POSTGRES_URL,
             table=Config.get("postgres.tables.zone_energy_metrics"),
             mode="append",
@@ -258,17 +226,16 @@ def write_zone_metrics_to_postgres(batch_df, batch_id):
         )
     )
 
-    print(
-        f"Stored PostgreSQL batch: {batch_id}"
-    )
+    print(f"Stored PostgreSQL batch: {batch_id}")
+
+
 def calculate_daily_household_energy(clean_df):
     """
     Calculate one daily energy summary for each household.
     """
 
     return (
-        clean_df
-        .withWatermark(
+        clean_df.withWatermark(
             "event_timestamp",
             Config.get("spark.watermark_duration"),
         )
@@ -285,26 +252,18 @@ def calculate_daily_household_energy(clean_df):
                 F.sum("power_consumption_kwh"),
                 3,
             ).alias("total_consumption_kwh"),
-
             F.round(
                 F.sum("solar_generation_kwh"),
                 3,
             ).alias("total_solar_generation_kwh"),
-
             F.round(
                 F.sum("grid_import_kwh"),
                 3,
             ).alias("total_grid_import_kwh"),
-
-            F.count("*").alias(
-                "meter_readings"
-            ),
+            F.count("*").alias("meter_readings"),
         )
         .select(
-            F.to_date(
-                F.col("window.start")
-            ).alias("energy_date"),
-
+            F.to_date(F.col("window.start")).alias("energy_date"),
             "household_id",
             "grid_zone",
             "total_consumption_kwh",
@@ -313,6 +272,8 @@ def calculate_daily_household_energy(clean_df):
             "meter_readings",
         )
     )
+
+
 def write_household_batch(batch_df, batch_id):
     """
     Atomically upsert finalized household totals and publish ready dates.
@@ -354,42 +315,27 @@ def write_household_batch(batch_df, batch_id):
     finally:
         connection.close()
 
-    print(
-        f"Stored household batch: {batch_id}"
-    )
-    
+    print(f"Stored household batch: {batch_id}")
+
+
 def main():
     spark = create_spark_session()
 
     spark.sparkContext.setLogLevel("WARN")
 
-    # Read continuous smart-meter events from Kafka.
+    # Both aggregations share the same parsed and validated event stream.
     kafka_df = read_kafka_stream(spark)
 
-    # Parse JSON events.
-    parsed_events = parse_meter_events(
-        kafka_df
-    )
+    parsed_events = parse_meter_events(kafka_df)
 
-    # Validate events and calculate grid import.
-    valid_events = prepare_meter_events(
-        parsed_events
-    )
+    valid_events = prepare_meter_events(parsed_events)
 
-    # -------------------------------------------------
-    # Stream 1: Real-time zone metrics
-    # -------------------------------------------------
-
-    zone_metrics = calculate_zone_metrics(
-        valid_events
-    )
+    # Operational metrics are finalized in five-minute event-time windows.
+    zone_metrics = calculate_zone_metrics(valid_events)
 
     zone_query = (
-        zone_metrics.writeStream
-        .outputMode("append")
-        .foreachBatch(
-            write_zone_metrics_to_postgres
-        )
+        zone_metrics.writeStream.outputMode("append")
+        .foreachBatch(write_zone_metrics_to_postgres)
         .option(
             "checkpointLocation",
             ZONE_CHECKPOINT_LOCATION,
@@ -397,22 +343,12 @@ def main():
         .start()
     )
 
-    # -------------------------------------------------
-    # Stream 2: Daily household energy
-    # -------------------------------------------------
-
-    household_daily_energy = (
-        calculate_daily_household_energy(
-            valid_events
-        )
-    )
+    # Daily totals feed the tariff reconciliation and billing workflow.
+    household_daily_energy = calculate_daily_household_energy(valid_events)
 
     household_query = (
-        household_daily_energy.writeStream
-        .outputMode("append")
-        .foreachBatch(
-            write_household_batch
-        )
+        household_daily_energy.writeStream.outputMode("append")
+        .foreachBatch(write_household_batch)
         .option(
             "checkpointLocation",
             HOUSEHOLD_CHECKPOINT_LOCATION,
@@ -420,7 +356,14 @@ def main():
         .start()
     )
 
-    # Keep both streaming queries running.
+    logger.info(
+        "streaming_queries_started zone_query_id=%s household_query_id=%s",
+        zone_query.id,
+        household_query.id,
+    )
+
     spark.streams.awaitAnyTermination()
+
+
 if __name__ == "__main__":
     main()

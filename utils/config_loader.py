@@ -24,18 +24,15 @@ class Config:
         """
 
         if cls._config is None:
-
             if not cls._config_path.exists():
                 raise FileNotFoundError(
-                    f"Configuration file not found: "
-                    f"{cls._config_path}"
+                    f"Configuration file not found: {cls._config_path}"
                 )
 
             with cls._config_path.open(
                 "r",
                 encoding="utf-8",
             ) as file:
-
                 cls._config = yaml.safe_load(file)
 
         return cls._config
@@ -55,7 +52,6 @@ class Config:
         value = config
 
         for part in key.split("."):
-
             if not isinstance(value, dict):
                 return default
 
