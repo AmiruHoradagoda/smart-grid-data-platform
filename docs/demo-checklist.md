@@ -21,7 +21,9 @@ Use existing data for a reliable, read-only demo. Have FastAPI running with
 - [ ] **2–3 min: Spark.** Run `docker compose logs --tail=20 spark`. Explain
   five-minute windows, the watermark, and finalized daily summaries.
 - [ ] **3-4 min: Airflow.** Show tariff ingestion and daily billing DAG status
-  at http://localhost:8080. Show an existing tariff CSV, without regenerating it.
+  at http://localhost:8080. Show an existing tariff CSV, then query
+  `daily_pipeline_status` to explain that both readiness flags make a simulated
+  date eligible; the one-minute dispatcher only discovers the durable work.
 - [ ] **4-8 min: Dashboard.** Open http://localhost:8501 after starting:
   ```powershell
   uv run streamlit run dashboard/app.py
@@ -40,5 +42,8 @@ Use existing data for a reliable, read-only demo. Have FastAPI running with
   alert boundaries, tariff reproducibility, and bounded history requests.
 
 For a fresh live demonstration, start both generators together before presenting
-and allow more than five minutes plus Airflow scheduling time for billing.
-Never reset volumes, checkpoints, metadata, or CSVs as a demo shortcut.
+and allow more than five minutes for Spark's watermark plus up to one dispatcher
+interval for billing. To demonstrate recovery, stop Airflow before both inputs
+become ready, show the `PENDING` row remains in `daily_pipeline_status`, restart
+Airflow, and show it become `COMPLETED`. Never reset volumes, checkpoints,
+metadata, or CSVs as a demo shortcut.

@@ -12,6 +12,8 @@ from utils.config_loader import Config
     ("postgres.database", "smart_grid"),
     ("alerts.low_renewable_threshold_pct", 20),
     ("simulation.simulated_day_seconds", 300),
+    ("orchestration.tariff_ingestion_schedule", "*/5 * * * *"),
+    ("orchestration.billing_dispatch_schedule", "* * * * *"),
 ])
 def test_project_configuration(key, expected):
     assert Config.get(key) == expected

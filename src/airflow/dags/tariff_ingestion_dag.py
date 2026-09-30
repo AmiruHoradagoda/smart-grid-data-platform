@@ -1,7 +1,7 @@
 import csv
 import logging
 
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import psycopg2
@@ -9,6 +9,7 @@ import psycopg2
 from airflow.sdk import dag, task
 
 from utils.config_loader import Config
+from utils.pipeline_status import update_tariff_readiness
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ def get_postgres_connection():
 
 
 @dag(
-    schedule="*/5 * * * *",
+    schedule=Config.get("orchestration.tariff_ingestion_schedule"),
     start_date=datetime(2026, 1, 1),
     catchup=False,
     tags=["smart-grid", "tariff"],
@@ -156,6 +157,8 @@ def tariff_ingestion():
 
         try:
 
+            effective_dates = set()
+
             with connection.cursor() as cursor:
 
                 for file_path in file_paths:
@@ -169,6 +172,14 @@ def tariff_ingestion():
                         reader = csv.DictReader(file)
 
                         for row in reader:
+
+                            effective_date = date.fromisoformat(
+                                row["effective_date"]
+                            )
+
+                            effective_dates.add(
+                                effective_date
+                            )
 
                             cursor.execute(
                                 """
@@ -204,7 +215,7 @@ def tariff_ingestion():
                                 """,
                                 (
                                     row["household_id"],
-                                    row["effective_date"],
+                                    effective_date,
 
                                     float(
                                         row["tariff_rate"]
@@ -221,7 +232,37 @@ def tariff_ingestion():
 
                     logger.info("Loaded tariff file: %s", Path(file_path).name)
 
+                expected_households = Config.get(
+                    "smart_meter.number_of_households"
+                )
+
+                for effective_date in sorted(effective_dates):
+                    households, is_ready = update_tariff_readiness(
+                        cursor,
+                        effective_date,
+                        expected_households,
+                    )
+
+                    logger.info(
+                        "tariff_readiness_published "
+                        "effective_date=%s households=%s ready=%s",
+                        effective_date,
+                        households,
+                        is_ready,
+                    )
+
+                    if not is_ready:
+                        raise ValueError(
+                            f"{effective_date}: expected "
+                            f"{expected_households} stored tariffs, "
+                            f"found {households}"
+                        )
+
             connection.commit()
+
+        except Exception:
+            connection.rollback()
+            raise
 
         finally:
             connection.close()

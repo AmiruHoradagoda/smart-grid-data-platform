@@ -14,10 +14,13 @@ flowchart TD
     K --> S[Spark Structured Streaming]
     S --> Z[(zone_energy_metrics)]
     S --> E[(household_daily_energy)]
+    S --> P[(daily_pipeline_status)]
     T[Tariff generator] --> C[Daily CSV files]
     C --> A[Airflow: tariff_ingestion]
     A --> R[(tariff_reference)]
-    E --> B[Airflow: daily_billing]
+    A --> P
+    P --> B[Airflow: daily_billing dispatcher]
+    E --> B
     R --> B
     B --> D[(daily_household_billing)]
     Z --> API[FastAPI]
@@ -25,9 +28,24 @@ flowchart TD
     API --> Dashboard[Streamlit Dashboard]
 ```
 
-The four data tables live in PostgreSQL database `smart_grid`. Airflow keeps its
+The five data tables live in PostgreSQL database `smart_grid`. Airflow keeps its
 own metadata in `airflow_meta`. Docker Compose runs Kafka, Spark, PostgreSQL,
 and Airflow. **FastAPI and the two producers currently run on the host.**
+
+### Architecture decision: Lambda-style hybrid
+
+This project uses a **Lambda-style hybrid architecture**: Kafka and Spark form
+the low-latency speed path for continuously arriving meter readings, while
+Airflow provides the scheduled batch/reconciliation path for tariff ingestion
+and daily billing. It is not a textbook Lambda implementation that computes the
+same raw dataset twice; the two paths have different responsibilities and meet
+at the daily household/date grain in PostgreSQL.
+
+A pure Kappa design was not selected because the once-per-simulated-day tariff
+CSV is naturally batch data and billing is required only after a complete day.
+Implementing billing entirely as a continuous stream would require longer-lived
+join state, tariff arrival coordination, retention rules, and replay handling,
+without providing a useful real-time billing benefit for this project.
 
 ## Technology stack
 
@@ -89,26 +107,42 @@ zero. Importing 10 kWh at 42 LKR/kWh yields an estimated bill of 420 LKR.
 | `household_daily_energy` | Household + simulated date; daily totals and reading count |
 | `tariff_reference` | Household + effective date; tariff, tier, and subsidy flag |
 | `daily_household_billing` | Household + energy date; joined energy/tariff fields and estimated bill |
+| `daily_pipeline_status` | Simulated date; durable energy/tariff readiness and billing state |
 
-Both Spark queries use a ten-minute event-time watermark and append finalized
-windows. A daily result needs events beyond the day boundary and watermark;
-stopping the producer at exactly five minutes may leave the final day pending.
-Spark checkpoints persist in `spark-checkpoints`. JDBC writes use append, not
-upsert; replaying a committed batch can cause primary-key conflicts.
+Both Spark queries use a ten-minute event-time watermark. A daily result needs
+events beyond the day boundary and watermark; stopping the producer at exactly
+five minutes may leave the final day pending. Spark checkpoints persist in
+`spark-checkpoints`. Zone-window metrics remain append-only. Household daily
+rows use idempotent PostgreSQL upserts, and Spark publishes the matching
+`energy_ready` marker in the same database transaction.
 
 ## Airflow
 
-Both DAGs run every five real minutes with catchup disabled:
+Airflow uses a durable readiness handoff rather than trying to match its real
+clock to the accelerated simulated clock:
 
-- `tariff_ingestion`: finds **all** tariff CSVs, validates columns, household
-  count, duplicate household IDs, and nonnegative rates, then upserts tariffs.
-- `daily_billing`: joins energy and tariffs on household and matching date,
-  then upserts bills. Missing tariffs omit that household/date until a later run.
+- `tariff_ingestion` runs every five real minutes. It finds **all** tariff CSVs,
+  validates columns, household count, duplicate household IDs, and nonnegative
+  rates, then upserts tariffs and publishes `tariff_ready` transactionally.
+- `daily_billing` is a lightweight dispatcher that runs every real minute. It
+  selects every simulated date for which both Spark energy and tariffs are
+  ready, then calculates that date's 20 household bills transactionally.
 
-Both use `ON CONFLICT DO UPDATE`, so reruns update existing keys rather than
-creating duplicate rows. They are independently scheduled; billing may need the
-next run if tariff ingestion finishes later. Airflow uses `standalone` for this
-local demo, with PostgreSQL metadata rather than SQLite.
+The dispatcher schedule controls how quickly Airflow notices work; it does not
+decide which simulated date is eligible. `daily_pipeline_status` is the durable
+source of truth, with `PENDING`, `PROCESSING`, `COMPLETED`, and `FAILED` states.
+If Airflow is stopped, ready dates remain pending in PostgreSQL and are processed
+after Airflow returns. Upserts make reruns idempotent. Airflow uses `standalone`
+for this local demo, with PostgreSQL metadata rather than SQLite.
+
+Inspect the handoff at any time:
+
+```sql
+SELECT energy_date, energy_ready, tariff_ready, energy_households,
+       tariff_households, billing_status, last_error
+FROM daily_pipeline_status
+ORDER BY energy_date;
+```
 
 ## API
 
@@ -157,6 +191,16 @@ docker exec smart-grid-postgres createdb -U smartgrid airflow_meta
 
 Skip `createdb` on an existing installation. `database/init.sql` initializes
 business tables only when the PostgreSQL data volume is first created.
+
+If you keep an existing PostgreSQL volume from an older version of this project,
+apply the readiness-table migration once:
+
+```powershell
+Get-Content -Raw database\migrations\001_daily_pipeline_status.sql | docker exec -i smart-grid-postgres psql -U smartgrid -d smart_grid
+```
+
+A fresh database volume receives the same table automatically from
+`database/init.sql`.
 
 ```powershell
 docker compose up -d --build
@@ -256,6 +300,9 @@ SELECT COUNT(*) FROM zone_energy_metrics;
 SELECT energy_date, COUNT(*) FROM household_daily_energy GROUP BY energy_date ORDER BY energy_date;
 SELECT effective_date, COUNT(*) FROM tariff_reference GROUP BY effective_date ORDER BY effective_date;
 SELECT COUNT(*) FROM daily_household_billing;
+SELECT energy_date, energy_ready, tariff_ready, energy_households, tariff_households,
+       billing_status, last_error
+FROM daily_pipeline_status ORDER BY energy_date;
 ```
 
 Use `\q` to exit. See the [5–10 minute demo checklist](docs/demo-checklist.md).

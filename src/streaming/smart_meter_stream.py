@@ -1,3 +1,7 @@
+import logging
+
+import psycopg2
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col,
@@ -20,6 +24,11 @@ from pyspark.sql.types import (
 )
 from pyspark.sql import functions as F
 from utils.config_loader import Config
+from utils.pipeline_status import write_daily_energy_rows
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 POSTGRES_URL = (
     f"jdbc:postgresql://{Config.get('postgres.docker.hostname')}:"
@@ -30,6 +39,16 @@ POSTGRES_PROPERTIES = {
     "password": Config.get("postgres.password"),
     "driver": "org.postgresql.Driver",
 }
+
+
+def get_postgres_connection():
+    return psycopg2.connect(
+        host=Config.get("postgres.docker.hostname"),
+        port=Config.get("postgres.docker.port"),
+        dbname=Config.get("postgres.database"),
+        user=Config.get("postgres.user"),
+        password=Config.get("postgres.password"),
+    )
 
 
 KAFKA_BOOTSTRAP_SERVERS = Config.get(
@@ -296,22 +315,44 @@ def calculate_daily_household_energy(clean_df):
     )
 def write_household_batch(batch_df, batch_id):
     """
-    Store finalized daily household energy totals
-    in PostgreSQL.
+    Atomically upsert finalized household totals and publish ready dates.
     """
 
     if batch_df.isEmpty():
         return
 
-    (
-        batch_df.write
-        .jdbc(
-            url=POSTGRES_URL,
-            table="household_daily_energy",
-            mode="append",
-            properties=POSTGRES_PROPERTIES,
-        )
-    )
+    # A finalized daily batch contains only one small row per household, so
+    # collecting it lets the rows and their readiness marker share a single
+    # PostgreSQL transaction. Replayed Spark batches remain idempotent.
+    rows = batch_df.collect()
+    connection = get_postgres_connection()
+
+    try:
+        with connection.cursor() as cursor:
+            readiness = write_daily_energy_rows(
+                cursor,
+                rows,
+                Config.get("smart_meter.number_of_households"),
+            )
+
+        connection.commit()
+
+        for energy_date, (households, is_ready) in readiness.items():
+            logger.info(
+                "daily_energy_published "
+                "batch_id=%s energy_date=%s households=%s ready=%s",
+                batch_id,
+                energy_date,
+                households,
+                is_ready,
+            )
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
 
     print(
         f"Stored household batch: {batch_id}"

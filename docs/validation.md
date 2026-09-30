@@ -28,6 +28,9 @@ SELECT COUNT(*) FROM zone_energy_metrics;
 SELECT energy_date, COUNT(*) AS households FROM household_daily_energy GROUP BY energy_date ORDER BY energy_date;
 SELECT effective_date, COUNT(*) AS households FROM tariff_reference GROUP BY effective_date ORDER BY effective_date;
 SELECT energy_date, COUNT(*) AS households FROM daily_household_billing GROUP BY energy_date ORDER BY energy_date;
+SELECT energy_date, energy_ready, tariff_ready, energy_households, tariff_households,
+       billing_status, last_error
+FROM daily_pipeline_status ORDER BY energy_date;
 
 -- Expected zero: stored bills disagree with current matching input rows.
 SELECT COUNT(*) AS mismatched_bills
@@ -45,8 +48,11 @@ ELSE 0 END) > 0.000001;
 ```
 
 Each complete day should normally have 20 households. A missing latest day may
-still be waiting for the event-time watermark or the next Airflow run. Exit with
-`\q`. Host tools connect to `127.0.0.1:5433`; Docker uses `postgres:5432`.
+still be waiting for the event-time watermark. Once both readiness flags are
+true, the billing state should move from `PENDING` to `COMPLETED` after the
+one-minute dispatcher runs. `FAILED` retains the error and is eligible for a
+later retry. Exit with `\q`. Host tools connect to `127.0.0.1:5433`; Docker uses
+`postgres:5432`.
 
 ## Airflow
 
@@ -60,9 +66,11 @@ docker exec smart-grid-airflow airflow dags list-runs daily_billing
 ```
 
 Expect successful DB access, an alive scheduler, both DAGs, and no import errors.
-New files may take up to the discovery interval to appear. Airflow commands run
-inside Linux Docker, not the Windows virtual environment. `list-runs` takes the
-DAG ID as a positional argument (no `-d`). Metadata is in `airflow_meta`.
+Tariff ingestion runs every five minutes; the billing dispatcher runs every
+minute and processes all ready simulated dates. New files may take up to the
+discovery interval to appear. Airflow commands run inside Linux Docker, not the
+Windows virtual environment. `list-runs` takes the DAG ID as a positional
+argument (no `-d`). Metadata is in `airflow_meta`.
 
 ## API
 
