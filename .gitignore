@@ -13,4 +13,10 @@ wheels/
 .env.*
 *.log
 *.tmp
+.runtime/*
+!.runtime/.gitkeep
 simple_auth_manager_passwords.json*
+
+# Runtime-generated tariff files
+data/tariffs/*.csv
+!data/tariffs/.gitkeep

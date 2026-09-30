@@ -244,6 +244,23 @@ them locally (do not include them in screenshots or submissions):
 docker exec smart-grid-airflow cat /opt/airflow/simple_auth_manager_passwords.json.generated
 ```
 
+## Optional Control Center
+
+The lightweight Tkinter Control Center provides a graphical interface for the
+same local commands. It can start/bootstrap containers, manage host processes,
+show recent logs and pipeline readiness, open the project UIs, stop while keeping
+data, or perform an explicitly confirmed factory reset.
+
+```powershell
+& .\.venv\Scripts\python.exe tools\control_center.py
+```
+
+The interface is optional and consumes no memory when closed. Closing it leaves
+Docker containers running by default. It only stops host processes that it
+started itself, does not accept arbitrary shell commands, and requires typing
+`RESET` before running `docker compose down -v --remove-orphans`. The normal
+PowerShell commands remain fully supported.
+
 ## Dashboard
 
 The host-run Streamlit dashboard reads **FastAPI → Streamlit**, with no direct
